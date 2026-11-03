@@ -51,6 +51,7 @@
 #define CONTROL_HZ 500
 #define TELEMETRY_HZ 50
 #define COMP_FILTER_TAU_S 0.5f // complementary filter time constant
+#define ACCEL_COMP 1.0f        // add back commanded wheel accel before atan2 (sim: settles faster; 0 = off)
 #define KP_DEFAULT 40.0f       // wheel accel per rad of pitch error (sim: 30-50 all recover)
 #define KD_DEFAULT 3.0f        // wheel accel per rad/s of pitch rate
 #define KV_DEFAULT 0.10f       // target lean (rad) per m/s of speed error

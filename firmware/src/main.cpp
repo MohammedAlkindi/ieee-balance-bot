@@ -215,7 +215,8 @@ static void controlTask(void *) {
     }
     bad_reads = 0;
     float rate = toRad((GYRO_PITCH - gyro_bias) * GYRO_SIGN);
-    float acc_pitch = atan2f(ACCEL_FWD, ACCEL_UP);
+    // Forward wheel acceleration reads as a backward tilt; add back last tick's command.
+    float acc_pitch = atan2f(ACCEL_FWD + ACCEL_COMP * accel_cmd / 9.81f, ACCEL_UP);
     pitch = alpha * (pitch + rate * dt) + (1 - alpha) * acc_pitch;
     float theta = pitch - gains.trim_rad;
 

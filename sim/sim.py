@@ -51,35 +51,59 @@ class Robot:
     m_w: float = 0.10     # both wheels, kg
     a_max: float = 12.0   # wheel acceleration the steppers can deliver, m/s^2
     v_max: float = 1.0    # wheel speed limit, m/s
-    noise_deg: float = 0.15
+    imu_h: float = 0.10   # IMU height above the axle, m
+    accel_noise_g: float = 0.004   # MPU-6050 at ~94 Hz bandwidth
+    gyro_noise_dps: float = 0.05
     delay_steps: int = 1  # one control period of sensing/actuation delay
+    accel_comp: float = 1.0  # firmware subtracts its own commanded acceleration from the accelerometer (0 = off)
 
 
 THETA_REF_MAX = math.radians(8)
 CUTOFF = math.radians(35)
+COMP_TAU = 0.5  # complementary filter time constant, s (firmware COMP_FILTER_TAU_S)
 
 
 def simulate(g: Gains, r: Robot, theta0_deg=0.0, push_dps=0.0, push_at=0.5, seconds=4.0, seed=1):
-    """Return (survived, peak_deg, settle_s, final_drift_m)."""
+    """Return (survived, peak_deg, settle_s, final_drift_m, peak_filter_error_deg, peak_torque_per_motor_Nm).
+
+    The controller sees what the firmware sees: a simulated accelerometer and gyro
+    fused by the same complementary filter, not the true pitch.
+    """
     rng = random.Random(seed)
-    th, thd = math.radians(theta0_deg), 0.0
+    th, thd, thdd, xdd = math.radians(theta0_deg), 0.0, 0.0, 0.0
     v = x = integ = 0.0
+    a_cmd_prev = 0.0
     I_b = r.M * r.body_h ** 2 / 12
     I_w = 0.5 * r.m_w * r.R ** 2
     A_w = (r.M + r.m_w) * r.R ** 2 + I_w
+    alpha = COMP_TAU / (COMP_TAU + DT)
+    pitch_est = th
     pending = [0.0] * (r.delay_steps + 1)
-    peak, settled_at = abs(th), None
-    sub = 10  # integrate the plant at 5 kHz inside each 500 Hz control step
+    peak, settled_at, peak_err, peak_tau = abs(th), None, 0.0, 0.0
+    sub = 10  # integrate the plant 10x faster than the control loop
     for k in range(int(seconds / DT)):
         t = k * DT
         if push_dps and abs(t - push_at) < DT / 2:
             thd += math.radians(push_dps)  # a shove = sudden pitch rate
-        # controller sees noisy pitch, clean gyro rate (gyro noise is small at this scale)
-        th_meas = th + math.radians(rng.gauss(0, r.noise_deg))
+
+        # sensors: specific force at the IMU in body axes, plus gyro rate
+        s_, c_ = math.sin(th), math.cos(th)
+        fx = xdd + r.imu_h * (c_ * thdd - s_ * thd ** 2)
+        fy = -r.imu_h * (s_ * thdd + c_ * thd ** 2) + G
+        acc_up = (fx * s_ + fy * c_) / G + rng.gauss(0, r.accel_noise_g)
+        acc_fwd = -(fx * c_ - fy * s_) / G + rng.gauss(0, r.accel_noise_g)  # + when tilted forward
+        rate = thd + math.radians(rng.gauss(0, r.gyro_noise_dps))
+        # same complementary filter as the firmware; forward acceleration reads as a backward
+        # tilt, so the firmware adds back its own last commanded acceleration
+        acc_pitch = math.atan2(acc_fwd + r.accel_comp * a_cmd_prev / G, acc_up)
+        pitch_est = alpha * (pitch_est + rate * DT) + (1 - alpha) * acc_pitch
+        peak_err = max(peak_err, abs(pitch_est - th))
+
         err_v = 0.0 - v
-        integ += err_v * DT
+        integ = max(-2.0, min(2.0, integ + err_v * DT))
         th_ref = max(-THETA_REF_MAX, min(THETA_REF_MAX, g.kv * err_v + g.ki * integ))
-        a_cmd = max(-r.a_max, min(r.a_max, g.kp * (th_meas - th_ref) + g.kd * thd))
+        a_cmd = max(-r.a_max, min(r.a_max, g.kp * (pitch_est - th_ref) + g.kd * rate))
+        a_cmd_prev = a_cmd
         pending.append(a_cmd)
         a = pending.pop(0)
         for _ in range(sub):
@@ -91,17 +115,21 @@ def simulate(g: Gains, r: Robot, theta0_deg=0.0, push_dps=0.0, push_at=0.5, seco
             D = A_w + 2 * r.M * r.R * r.L * c_ + r.M * r.L ** 2 + I_b
             thdd = (r.M * G * r.L * s_ + r.M * r.R * r.L * s_ * thd ** 2
                     - (A_w + r.M * r.R * r.L * c_) * a_eff / r.R) / D
+            xdd = a_eff + r.R * thdd  # axle (ground) acceleration
+            # torque both motors put into the wheels, from the body's own equation of motion
+            tau = r.M * G * r.L * s_ - r.M * r.L * c_ * xdd - (I_b + r.M * r.L ** 2) * thdd
+            peak_tau = max(peak_tau, abs(tau) / 2)
             thd += thdd * h
             th += thd * h
             x += (v + r.R * thd) * h  # ground speed = relative wheel speed + body rotation
         peak = max(peak, abs(th))
         if abs(th) > CUTOFF:
-            return False, math.degrees(peak), None, x
+            return False, math.degrees(peak), None, x, math.degrees(peak_err), peak_tau
         if abs(th) < math.radians(1) and abs(thd) < math.radians(10):
             settled_at = settled_at if settled_at is not None else t
         else:
             settled_at = None
-    return True, math.degrees(peak), settled_at, x
+    return True, math.degrees(peak), settled_at, x, math.degrees(peak_err), peak_tau
 
 
 SCENARIOS = [
@@ -115,10 +143,11 @@ SCENARIOS = [
 def report(g: Gains, r: Robot) -> bool:
     ok_all = True
     for name, kw in SCENARIOS:
-        ok, peak, settle, drift = simulate(g, r, **kw)
+        ok, peak, settle, drift, err, tau = simulate(g, r, **kw)
         ok_all &= ok and settle is not None
         status = f"settled in {settle:.2f} s" if ok and settle is not None else ("never settled" if ok else "FELL")
-        print(f"  {name:20s} peak {peak:5.1f} deg  {status:18s} drift {drift:+.2f} m")
+        print(f"  {name:20s} peak {peak:5.1f} deg  {status:18s} drift {drift:+.2f} m"
+              f"  filter err {err:4.1f} deg  torque {tau:.3f} N*m/motor")
     return ok_all
 
 
@@ -140,8 +169,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--L", type=float, default=0.10, help="axle to centre-of-mass height, m")
+    ap.add_argument("--M", type=float, default=1.0, help="body mass incl. motors and battery, kg")
     args = ap.parse_args()
-    robot = Robot(L=args.L)
+    robot = Robot(L=args.L, M=args.M, imu_h=args.L)
     if args.sweep:
         sweep(robot)
     else:
