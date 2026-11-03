@@ -74,6 +74,9 @@ Bring-up order, wheels off the ground (robot on a stand) until step 5:
 1. `kv 0` and `ki 0`. Raise `kp` until it catches itself and starts to oscillate, then raise `kd` until the oscillation dies.
 2. Bring back a small `kv`, then `ki`, until it stops drifting across the floor.
 3. To slow down it must first lean back, so the speed loop's effect looks backwards. That is expected.
+4. Watch `loop_us` and `jit_us`. If the loop is late often or `jit_us` stays above about 20 us, set
+   `CONTROL_HZ 250` in `config.h`: working stepper balancers run at 100-250 Hz, and the simulator's
+   default gains still recover at 250 Hz.
 
 Write the final gains back into `config.h`.
 
