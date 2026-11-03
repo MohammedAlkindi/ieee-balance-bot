@@ -47,7 +47,7 @@ and those capacitors. Pins avoid the strapping pins (0, 3, 45, 46), native USB
 (19, 20) and the flash/PSRAM pins (26-37).
 
 Power: 3S LiPo -> XT60 -> 5 A blade fuse -> switch -> drivers' VM, and a 5 V buck
-(Pololu D36V28F5 or similar) -> a jumper -> ESP32-S3 5V pin. No Raspberry Pi on the
+(an LM2596 module set to 5.0 V with a meter before you connect it, or a Pololu D36V28F5) -> a jumper -> ESP32-S3 5V pin. No Raspberry Pi on the
 robot in the first build; the laptop is the host.
 
 **USB and the buck must not both power the board.** Espressif lists USB, the 5V pin and
