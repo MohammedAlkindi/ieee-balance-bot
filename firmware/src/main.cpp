@@ -7,7 +7,8 @@
 // Core 0: telemetry task. Prints one JSON line every 20 ms plus event lines,
 //         re-sends the driver config after a power cycle, and reads tuning
 //         commands typed on the same USB serial port:
-//           kp 30 | kd 2 | kv 0.1 | ki 0.05 | trim -1.5 | arm | disarm | get
+//           kp 40 | kd 3 | kv 0.1 | ki 0.05 | trim -1.5 | arm | disarm | get
+//         It also checks both drivers at 10 Hz and disarms if one resets.
 // The control task never prints and never waits on Serial.
 #include <Arduino.h>
 #include <TMC2209.h>
@@ -39,7 +40,7 @@ struct Snapshot {
 static Snapshot snap;
 static portMUX_TYPE snap_mux = portMUX_INITIALIZER_UNLOCKED;
 
-enum EventType : uint8_t { EV_ARMED, EV_FELL, EV_RECOVERED, EV_LOWBAT, EV_CUTOFF, EV_IMU_LOST };
+enum EventType : uint8_t { EV_ARMED, EV_FELL, EV_RECOVERED, EV_LOWBAT, EV_CUTOFF, EV_IMU_LOST, EV_DRIVER_FAULT };
 struct Event {
   EventType type;
   float a, b;
@@ -47,6 +48,10 @@ struct Event {
 static QueueHandle_t events;
 
 static volatile bool arm_request = false, disarm_request = false;
+// Set by the telemetry task's driver check. A TMC2209 that lost motor power comes back
+// with default registers (StealthChop, and 1/8 vs 1/32 microsteps set by its address
+// pins), so the robot must not run on it until it has been configured again.
+static volatile bool drivers_ok = false, driver_fault = false;
 static TaskHandle_t control_handle;
 static TMC2209 tmc_l, tmc_r;
 
@@ -226,6 +231,10 @@ static void controlTask(void *) {
       speed = 0;
       armed = false;
     }
+    if (driver_fault) {
+      driver_fault = false;
+      if (armed) disarm(EV_DRIVER_FAULT, 0);
+    }
 
     if (armed && fabsf(theta) > cutoff) {
       disarm(EV_FELL, toDeg(theta));
@@ -265,7 +274,7 @@ static void controlTask(void *) {
       else if (upright_since < 0) upright_since = now;
       bool held = upright_since >= 0 && now - upright_since > ARM_HOLD_MS * 1000LL;
       bool battery_ok = vbat < 5.0f || vbat > VBAT_CUTOFF_V;  // < 5 V: USB only, no pack fitted
-      if ((held || arm_request) && fabsf(theta) < arm_window && battery_ok) {
+      if ((held || arm_request) && fabsf(theta) < arm_window && battery_ok && drivers_ok) {
         arm_request = false;
         integ = ref = speed = 0;
         disturbed = false;
@@ -336,14 +345,21 @@ static void telemetryTask(void *) {
         case EV_LOWBAT: Serial.printf("{\"ev\":\"lowbat\",\"vbat\":%.2f}\n", e.a); break;
         case EV_CUTOFF: Serial.printf("{\"ev\":\"battery_cutoff\",\"vbat\":%.2f}\n", e.a); break;
         case EV_IMU_LOST: Serial.println("{\"ev\":\"imu_lost\"}"); break;
+        case EV_DRIVER_FAULT: Serial.println("{\"ev\":\"driver_fault\"}"); break;
       }
     }
 
-    // Once a second, and only while disarmed, re-send the driver config if a
-    // driver has power-cycled (battery switched on after USB).
-    if (++n % TELEMETRY_HZ == 0 && !s.armed) {
-      if (tmc_l.isCommunicatingButNotSetup()) configureDriver(tmc_l, TMC2209::SERIAL_ADDRESS_0);
-      if (tmc_r.isCommunicatingButNotSetup()) configureDriver(tmc_r, TMC2209::SERIAL_ADDRESS_1);
+    // 10 Hz driver check. Any driver that is unpowered or has reset to defaults
+    // disarms the robot; one that answers but lost its settings is configured again,
+    // and the robot can re-arm only after both read back as set up.
+    if (++n % (TELEMETRY_HZ / 10) == 0) {
+      bool l_ok = tmc_l.isSetupAndCommunicating(), r_ok = tmc_r.isSetupAndCommunicating();
+      if (!(l_ok && r_ok)) {
+        if (s.armed) driver_fault = true;
+        if (!l_ok && tmc_l.isCommunicatingButNotSetup()) configureDriver(tmc_l, TMC2209::SERIAL_ADDRESS_0);
+        if (!r_ok && tmc_r.isCommunicatingButNotSetup()) configureDriver(tmc_r, TMC2209::SERIAL_ADDRESS_1);
+      }
+      drivers_ok = l_ok && r_ok;
     }
 
     while (Serial.available()) {
@@ -382,7 +398,8 @@ void setup() {
 
   configureDriver(tmc_l, TMC2209::SERIAL_ADDRESS_0);
   configureDriver(tmc_r, TMC2209::SERIAL_ADDRESS_1);
-  if (!tmc_l.isSetupAndCommunicating() || !tmc_r.isSetupAndCommunicating())
+  drivers_ok = tmc_l.isSetupAndCommunicating() && tmc_r.isSetupAndCommunicating();
+  if (!drivers_ok)
     Serial.println("{\"warn\":\"a TMC2209 is not answering on UART; check PDN_UART wiring, MS1/MS2 address pins and battery power\"}");
 
   events = xQueueCreate(8, sizeof(Event));
