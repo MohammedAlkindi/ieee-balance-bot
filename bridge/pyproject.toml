@@ -1,0 +1,14 @@
+[project]
+name = "balance-bot-bridge"
+version = "0.1.0"
+description = "Serial telemetry to Claude to ElevenLabs bridge for a self-balancing robot"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=2.4",
+    "pyserial>=3.5",
+    "websockets>=14",
+    "sounddevice>=0.5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]

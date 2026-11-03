@@ -1,0 +1,7 @@
+.venv/
+.pio/
+.pytest_cache/
+__pycache__/
+*.pyc
+.pio-build.log
+.research.txt
