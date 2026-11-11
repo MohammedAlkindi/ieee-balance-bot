@@ -3,6 +3,7 @@
 The ESP32-S3 prints one JSON object per line on its USB serial port:
   telemetry  {"t": 12345, "p": 1.2, "r": -3.4, "v": 0.05, "armed": 1, "vbat": 11.8, "loop_us": 2000, "jit_us": 14}
   events     {"ev": "recovered", "peak": 9.8, "ms": 640}  |  {"ev": "fell", "p": 41.0}  |  {"ev": "armed"}
+             {"ev": "pad_connected"}  |  {"ev": "pad_lost"}  (gamepad; "vt"/"yaw" are its speed and turn targets)
 
 The bridge keeps the last few seconds of telemetry, and on an event (or a
 question typed into this terminal) asks Claude for one or two spoken sentences,
@@ -81,7 +82,7 @@ class RobotState:
             return {}
         pitches = [s["p"] for s in self.history if isinstance(s.get("p"), (int, float))]
         latest = self.history[-1]
-        out = {k: latest[k] for k in ("p", "r", "v", "vbat", "loop_us", "jit_us", "armed") if k in latest}
+        out = {k: latest[k] for k in ("p", "r", "v", "vt", "yaw", "vbat", "loop_us", "jit_us", "armed") if k in latest}
         if pitches:
             out["pitch_min"] = round(min(pitches), 1)
             out["pitch_max"] = round(max(pitches), 1)
