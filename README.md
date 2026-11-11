@@ -1,20 +1,20 @@
 # Balance bot (IEEE at UCSD QP, Project 28)
 
 A two-wheeled self-balancing robot: an ESP32-S3 balances it at 500 Hz on two
-NEMA 17 steppers, and a Python bridge on a laptop turns its telemetry into
-speech (Claude writes the line, ElevenLabs says it).
+NEMA 17 steppers, a Bluetooth gamepad drives it, and a Python bridge on a laptop
+turns its telemetry into speech (Claude writes the line, ElevenLabs says it).
 
 | Folder | What it is | Status |
 |---|---|---|
-| `sim/` | Plain-Python physics model for picking gains before hardware | Runs; default gains recover in every scenario |
-| `firmware/` | PlatformIO project for the ESP32-S3 (Arduino-ESP32 3.x) | Compiles; not yet run on a robot |
+| `sim/` | Plain-Python physics model for picking gains before hardware | Runs; default gains recover and drive in every scenario |
+| `firmware/` | PlatformIO project for the ESP32-S3: Arduino-ESP32 3.3.12 inside ESP-IDF 5.5.5, plus Bluepad32 | Compiles; not yet run on a robot or paired with a pad |
 | `bridge/` | Serial telemetry -> Claude -> ElevenLabs -> speaker | 6 tests pass; not yet run with real keys |
 
 ## 1. Simulate (no hardware)
 
 ```bash
 cd sim
-python sim.py            # recovery from tilts and shoves with the default gains
+python sim.py            # recovery from tilts and shoves, plus driving with the gamepad limits
 python sim.py --sweep    # which kp/kd pairs survive every scenario
 python sim.py --L 0.15 --M 1.3   # your robot: centre-of-mass height above the axle (m) and body mass (kg)
 ```
@@ -23,6 +23,12 @@ The sim feeds the controller a simulated accelerometer and gyro through the same
 complementary filter as the firmware. Its `torque` column is the peak torque each
 motor must deliver; check it against your motor's pull-out torque at that speed.
 Measure `L` on the printed chassis (balance it on a ruler edge) and re-run.
+
+Driving: the stick asks for a speed, the firmware ramps the speed target with limited
+acceleration and jerk, and the robot leans into that acceleration (`kff`). Without that lean
+the sim lags the stick by about 0.25 m/s; with it, under 0.07 m/s, and the lean peaks near 5
+degrees at the default 0.4 m/s. The sim models only the speed shaper and lean, not turning; to
+check a change to `DRIVE_*` in `config.h`, copy it into `Drive` and `DRIVE_SPEED` in `sim.py`.
 
 ## 2. Wiring (ESP32-S3-DevKitC-1)
 
@@ -59,11 +65,20 @@ stay joined). Close it only when running without USB, or use a USB cable with VB
 
 ```bash
 cd firmware
-pio run -t upload        # or: uvx --from platformio pio run -t upload
+pio run -t upload        # or: uvx --python 3.12 --from platformio pio run -t upload
 pio device monitor       # JSON lines at 50 Hz
 ```
 
-PlatformIO refuses to run under Git Bash/MSYS on Windows; use PowerShell or cmd.
+PlatformIO refuses to run under Git Bash/MSYS on Windows; use PowerShell or cmd. The first
+build downloads ESP-IDF and builds the Arduino core from source: expect 30-45 minutes and a few
+hundred MB. Later builds take about a minute.
+
+The native USB port (the one you flash through) carries only the JSON telemetry and commands.
+ESP-IDF and Bluetooth logs, and crash backtraces, go to the board's other USB connector
+(marked UART) at 115200 baud. Plug both in when something crashes.
+
+`firmware/sdkconfig.defaults` sets the ESP-IDF options. If you change it, delete
+`firmware/sdkconfig.esp32s3` so the next build picks the change up.
 
 Bring-up order, wheels off the ground (robot on a stand) until step 5:
 
@@ -83,7 +98,11 @@ Bring-up order, wheels off the ground (robot on a stand) until step 5:
 
 ## 4. Tune (type into the serial monitor)
 
-`kp 40` `kd 3` `kv 0.1` `ki 0.05` `trim -1.5` `arm` `disarm` `get`
+`kp 40` `kd 3` `kv 0.1` `ki 0.05` `kff 1` `trim -1.5` `arm` `disarm` `pair` `forget` `get`
+
+`disarm` keeps the motors off until `arm` (or A on the pad), even if you hold the robot upright.
+`pair` looks for a new pad for 20 s and `forget` unpairs every pad; both only work while disarmed.
+An `arm` (or A) that cannot arm right then is dropped, not saved for later.
 
 1. `kv 0` and `ki 0`. Raise `kp` until it catches itself and starts to oscillate, then raise `kd` until the oscillation dies.
 2. Bring back a small `kv`, then `ki`, until it stops drifting across the floor.
@@ -94,7 +113,34 @@ Bring-up order, wheels off the ground (robot on a stand) until step 5:
 
 Write the final gains back into `config.h`.
 
-## 5. Voice bridge
+## 5. Drive with a gamepad
+
+Bluepad32 pairs one Bluetooth LE gamepad. The S3 has no Bluetooth Classic, so PS4, PS5, Switch
+and Wii pads will not connect. An Xbox Wireless controller works once its firmware is 5.x or
+newer (update it in the Xbox Accessories app on a PC or Xbox). Steam and Stadia pads need their
+Bluetooth firmware update.
+
+1. Power the board and leave the robot lying down. For 20 s after boot (and after `pair`, `forget`,
+   or losing the pad) it looks for pads, and it will not arm until 3 s after that window closes,
+   because pairing writes to flash and that pauses the balance loop. A pad that connects closes the
+   window early. Without a pad, the robot can first arm about 23 s after boot.
+2. Hold the pad's pair button until its logo flashes fast. The monitor prints
+   `{"ev":"pad_connected"}`, and telemetry shows `pad_ms` (age of the last report) instead of -1.
+3. Arm as usual (hold it upright and still), or press A. The stick must be centred to arm.
+4. Left stick up and down asks for speed, up to `DRIVE_SPEED_MAX_MPS` (0.4 m/s). Left and right turns.
+5. B is the stop button: motors off at once, and they stay off until A or `arm`.
+
+If the pad goes quiet for 0.3 s or disconnects, the targets fall back to zero and the robot keeps
+balancing in place (`{"ev":"pad_lost"}` on a disconnect). A pad lost while armed cannot reconnect
+until the robot is disarmed (tip it past 35 degrees, or type `disarm`), so B is gone until then. Telemetry adds `vt` (speed target, m/s)
+and `yaw` (turn rate target, rad/s). To check directions with the wheels off the ground, watch telemetry
+rather than the wheels (the balance loop fights you on a stand: to drive forward it first spins the
+wheels backward to lean forward). Stick up must make `vt` go positive, and stick right must make
+`yaw` positive and the left wheel spin faster than the right. If pushing the stick
+still stops the robot after 0.3 s, watch `pad_ms` while holding the stick still; if it climbs past
+300, raise `GAMEPAD_TIMEOUT_MS`. Measure `TRACK_WIDTH_M` (wheel centre to wheel centre).
+
+## 6. Voice bridge
 
 ```bash
 cd bridge
@@ -116,4 +162,8 @@ question into the bridge's terminal and press Enter to ask the robot.
 - Charge LiPos on a balance charger at 1C or less, in a LiPo bag, never unattended. Never use a swollen pack.
 - The firmware warns at 10.8 V and cuts the motors at 10.2 V under load; also plug a LiPo alarm into the balance lead.
 - The voice bridge only reads telemetry. Nothing it does can drive the motors.
+- The gamepad can. Keep a hand near the robot and the pad's B button in the first drive tests,
+  and test new drive limits with the wheels off the ground.
+- The firmware includes BTstack, which is free for non-commercial use only; see
+  `firmware/THIRD_PARTY_NOTICES.md` before using it for anything paid.
 - Keep API keys in environment variables, never in the repo, and set a monthly spend limit in the Anthropic and ElevenLabs consoles.

@@ -38,7 +38,7 @@
 #define WHEEL_DIAMETER_M 0.090f // 85-95 mm printed wheel with a rubber O-ring or TPU tire
 #define FULL_STEPS_PER_REV 200
 #define STEPS_PER_M (FULL_STEPS_PER_REV * MICROSTEPS / (3.14159265f * WHEEL_DIAMETER_M))
-#define V_MAX_MPS 1.0f         // wheel speed limit
+#define V_MAX_MPS 1.0f         // mean wheel speed limit; turning adds up to TURN_RATE_MAX * TRACK / 2 per wheel
 #define A_MAX_MPS2 12.0f       // wheel acceleration limit (raise if motors keep up)
 
 // ---- Battery sense: 3S pack -> 100k / 22k divider -> GPIO1 (ADC1) ----
@@ -63,4 +63,23 @@
 #define DISTURB_DEG 6.0f       // a lean past this counts as a disturbance
 #define RECOVER_DEG 2.0f       // back inside this for 100 ms = recovered
 
+// ---- Gamepad drive (Bluepad32; the S3 only pairs BLE pads, e.g. an Xbox pad on firmware 5.x+) ----
+// The left stick asks for a speed and a turn rate. Start slow. sim/sim.py models only the speed
+// shaper and lean; copy any change to DRIVE_SPEED_MAX/ACCEL/JERK/GAIN into its Drive and DRIVE_SPEED.
+#define DRIVE_SPEED_MAX_MPS 0.4f  // full stick forward or back (sim: lean peaks ~5 deg, lags < 0.07 m/s)
+#define DRIVE_ACCEL_MPS2 0.5f     // the speed target's acceleration cap
+#define DRIVE_JERK_MPS3 2.0f      // how fast that acceleration may change; keeps the lean smooth
+#define DRIVE_GAIN 3.0f           // 1/s, how hard the target closes on the stick
+#define KFF_DEFAULT 1.0f          // lean into the target's acceleration (theta_ref += kff * a / g)
+#define TURN_RATE_MAX_RPS 1.5f    // rad/s at full stick sideways (~86 deg/s)
+#define TURN_ACCEL_RPS2 4.0f      // turn rate change limit
+#define TRACK_WIDTH_M 0.16f       // wheel centre to wheel centre; measure yours
+#define STICK_DEADBAND 0.08f      // fraction of full stick ignored around centre
+#define GAMEPAD_TIMEOUT_MS 300    // no report for this long = stick centred (robot stops in place)
+#define PAIR_WINDOW_S 20          // look for pads this long after boot, "pair", "forget" or a lost pad
+#define PAIR_SETTLE_MS 3000       // and refuse to arm until this long after looking stops
+
 static_assert(V_MAX_MPS * STEPS_PER_M < STEP_TICK_HZ / 2, "top speed needs more steps/s than the step generator can make");
+static_assert((V_MAX_MPS + TURN_RATE_MAX_RPS * TRACK_WIDTH_M / 2) * STEPS_PER_M < STEP_TICK_HZ / 2,
+              "top speed plus turning needs more steps/s than the step generator can make");
+static_assert(DRIVE_SPEED_MAX_MPS < 0.6f * V_MAX_MPS, "leave wheel-speed headroom above the drive speed for balancing");

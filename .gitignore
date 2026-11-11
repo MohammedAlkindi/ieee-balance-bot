@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .pio-build.log
 .research.txt
+firmware/managed_components/
+firmware/sdkconfig.esp32s3
+firmware/sdkconfig.esp32s3.old

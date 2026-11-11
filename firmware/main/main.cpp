@@ -7,9 +7,14 @@
 // Core 0: telemetry task. Prints one JSON line every 20 ms plus event lines,
 //         re-sends the driver config after a power cycle, and reads tuning
 //         commands typed on the same USB serial port:
-//           kp 40 | kd 3 | kv 0.1 | ki 0.05 | trim -1.5 | arm | disarm | get
+//           kp 40 | kd 3 | kv 0.1 | ki 0.05 | kff 1 | trim -1.5 | arm | disarm | pair | forget | get
 //         It also checks both drivers at 10 Hz and disarms if one resets.
-// The control task never prints and never waits on Serial.
+// Core 0: gamepad task (gamepad.cpp, Bluepad32). The left stick asks for a speed and a turn rate.
+//         The control task shapes the speed with limited acceleration and jerk, leans
+//         into that acceleration, and splits the turn across the two wheels. If the
+//         pad goes quiet for GAMEPAD_TIMEOUT_MS the targets fall back to zero and the
+//         robot keeps balancing in place.
+// The control task never prints and never waits on Serial or the gamepad.
 #include <Arduino.h>
 #include <TMC2209.h>
 #include <Wire.h>
@@ -17,6 +22,7 @@
 #include <soc/gpio_reg.h>
 
 #include "config.h"
+#include "pad.h"
 
 // Float versions of Arduino's degrees()/radians(), which promote to double;
 // the S3 FPU is single precision, so doubles would be emulated in the 500 Hz loop.
@@ -26,28 +32,43 @@ static inline float toRad(float deg) { return deg * 0.0174532925f; }
 // ---------------------------------------------------------------- shared state
 
 struct Gains {
-  volatile float kp = KP_DEFAULT, kd = KD_DEFAULT, kv = KV_DEFAULT, ki = KI_DEFAULT;
+  volatile float kp = KP_DEFAULT, kd = KD_DEFAULT, kv = KV_DEFAULT, ki = KI_DEFAULT, kff = KFF_DEFAULT;
   volatile float trim_rad = 0.0f;  // pitch offset so "upright" reads as zero
 };
 static Gains gains;
 
 struct Snapshot {
   uint32_t t_ms;
-  float pitch_deg, rate_dps, speed_mps, ref_deg, accel_mps2, vbat;
+  float pitch_deg, rate_dps, speed_mps, ref_deg, accel_mps2, vbat, target_mps, turn_rps;
   uint32_t loop_us, jitter_us;
+  int32_t pad_ms;  // age of the last gamepad report; -1 = no pad
   bool armed;
 };
 static Snapshot snap;
 static portMUX_TYPE snap_mux = portMUX_INITIALIZER_UNLOCKED;
 
-enum EventType : uint8_t { EV_ARMED, EV_FELL, EV_RECOVERED, EV_LOWBAT, EV_CUTOFF, EV_IMU_LOST, EV_DRIVER_FAULT };
+// Latest stick position from the gamepad, as fractions of full stick (-1..1).
+struct DriveCmd {
+  float speed = 0, turn = 0;
+  int64_t stamp_us = -1;  // esp_timer time of the last report; -1 = never
+};
+static DriveCmd drive_cmd;
+static portMUX_TYPE drive_mux = portMUX_INITIALIZER_UNLOCKED;
+
+enum EventType : uint8_t {
+  EV_ARMED, EV_FELL, EV_RECOVERED, EV_LOWBAT, EV_CUTOFF, EV_IMU_LOST, EV_DRIVER_FAULT, EV_PAD_ON, EV_PAD_OFF
+};
 struct Event {
   EventType type;
   float a, b;
 };
 static QueueHandle_t events;
 
-static volatile bool arm_request = false, disarm_request = false;
+static volatile bool arm_request = false, disarm_request = false, pad_connected = false;
+static volatile bool robot_armed = false;  // copy of the control task's state for other tasks
+// Set by the gamepad task while it looks for pads and for PAIR_SETTLE_MS after. Pairing writes
+// the bond to flash, which pauses the control task, so the robot does not arm during it.
+volatile bool pad_pairing = false;
 // Set by the telemetry task's driver check. A TMC2209 that lost motor power comes back
 // with default registers (StealthChop, and 1/8 vs 1/32 microsteps set by its address
 // pins), so the robot must not run on it until it has been configured again.
@@ -62,7 +83,7 @@ static TMC2209 tmc_l, tmc_r;
 static volatile uint32_t inc_l = 0, inc_r = 0;
 static uint32_t phase_l = 0, phase_r = 0;
 
-static void ARDUINO_ISR_ATTR onStepTick() {
+static void IRAM_ATTR onStepTick() {
   REG_WRITE(GPIO_OUT_W1TC_REG, (1UL << PIN_STEP_L) | (1UL << PIN_STEP_R));  // end last pulse
   uint32_t high = 0, before = phase_l;
   phase_l += inc_l;
@@ -73,14 +94,16 @@ static void ARDUINO_ISR_ATTR onStepTick() {
   if (high) REG_WRITE(GPIO_OUT_W1TS_REG, high);  // pulse stays high for one tick (25 us)
 }
 
-static void setWheelSpeed(float speed_mps) {
-  float sps = speed_mps * STEPS_PER_M;  // signed steps per second
-  bool fwd = sps >= 0;
-  digitalWrite(PIN_DIR_L, fwd ? HIGH : LOW);
-  digitalWrite(PIN_DIR_R, (fwd != (bool)RIGHT_MOTOR_REVERSED) ? HIGH : LOW);
-  uint32_t inc = (uint32_t)(fabsf(sps) * (4294967296.0f / STEP_TICK_HZ));
-  inc_l = inc;
-  inc_r = inc;
+static uint32_t stepIncrement(float speed_mps) {
+  return (uint32_t)(fabsf(speed_mps) * STEPS_PER_M * (4294967296.0f / STEP_TICK_HZ));
+}
+
+// Signed ground speeds for each wheel, m/s (+ = forward).
+static void setWheelSpeeds(float left_mps, float right_mps) {
+  digitalWrite(PIN_DIR_L, left_mps >= 0 ? HIGH : LOW);
+  digitalWrite(PIN_DIR_R, ((right_mps >= 0) != (bool)RIGHT_MOTOR_REVERSED) ? HIGH : LOW);
+  inc_l = stepIncrement(left_mps);
+  inc_r = stepIncrement(right_mps);
 }
 
 static void motorsOff() {
@@ -171,7 +194,7 @@ static void calibrateGyro() {
 
 // ---------------------------------------------------------------- control task
 
-static void ARDUINO_ISR_ATTR onControlTick() {
+static void IRAM_ATTR onControlTick() {
   BaseType_t woken = pdFALSE;
   vTaskNotifyGiveFromISR(control_handle, &woken);
   portYIELD_FROM_ISR(woken);
@@ -182,6 +205,48 @@ static void sendEvent(EventType type, float a = 0, float b = 0) {
   xQueueSend(events, &e, 0);  // drop rather than block the loop
 }
 
+// Turns the stick into a speed target the robot can follow: the target closes on
+// the stick at DRIVE_GAIN, with its acceleration capped at DRIVE_ACCEL and that
+// acceleration changing no faster than DRIVE_JERK. Same as Shaper in sim/sim.py.
+struct SpeedShaper {
+  float v = 0, a = 0;
+  void reset() { v = a = 0; }
+  void step(float want, float dt) {
+    float a_want = constrain((want - v) * DRIVE_GAIN, -DRIVE_ACCEL_MPS2, DRIVE_ACCEL_MPS2);
+    a += constrain(a_want - a, -DRIVE_JERK_MPS3 * dt, DRIVE_JERK_MPS3 * dt);
+    v += a * dt;
+  }
+};
+
+// ---------------------------------------------------------------- gamepad hooks (pad.h)
+
+void padReport(float speed, float turn, int64_t stamp_us) {
+  DriveCmd c{constrain(speed, -1.0f, 1.0f), constrain(turn, -1.0f, 1.0f), stamp_us};
+  portENTER_CRITICAL(&drive_mux);
+  drive_cmd = c;
+  portEXIT_CRITICAL(&drive_mux);
+}
+
+void padArm() {
+  if (!robot_armed) arm_request = true;
+}
+void padDisarm() { disarm_request = true; }
+bool robotArmed() { return robot_armed; }
+
+void padConnection(bool connected) {
+  if (connected == pad_connected) return;
+  pad_connected = connected;
+  if (!connected) padReport(0, 0, -1);  // the pad keeps its last stick values; forget them
+  sendEvent(connected ? EV_PAD_ON : EV_PAD_OFF);
+}
+
+// Stick deadband, then rescale so motion starts from zero just past it.
+static float applyDeadband(float x) {
+  if (fabsf(x) < STICK_DEADBAND) return 0.0f;
+  float s = (fabsf(x) - STICK_DEADBAND) / (1.0f - STICK_DEADBAND);
+  return copysignf(constrain(s, 0.0f, 1.0f), x);
+}
+
 static void controlTask(void *) {
   const float dt = 1.0f / CONTROL_HZ;
   const float alpha = COMP_FILTER_TAU_S / (COMP_FILTER_TAU_S + dt);
@@ -190,7 +255,10 @@ static void controlTask(void *) {
 
   float pitch = 0, integ = 0, ref = 0, accel_cmd = 0, speed = 0;
   bool armed = false, disturbed = false, lowbat_sent = false;
+  bool hold_off = false;  // after a disarm command, stay off until an arm command
   float peak = 0, vbat = 0;
+  SpeedShaper target;
+  float turn = 0;  // yaw rate target, rad/s (+ = clockwise seen from above)
   int64_t upright_since = -1, disturb_start = 0, inside_since = -1;
   int64_t last_us = esp_timer_get_time();
   uint32_t jitter_max = 0, loop_us = 0;
@@ -200,8 +268,11 @@ static void controlTask(void *) {
   if (mpuRead(ax, ay, az, gx, gy, gz)) pitch = atan2f(ACCEL_FWD, ACCEL_UP);
 
   auto disarm = [&](EventType why, float a) {
+    arm_request = false;
     motorsOff();
     speed = 0;
+    target.reset();
+    turn = 0;
     armed = false;
     sendEvent(why, a);
   };
@@ -227,8 +298,12 @@ static void controlTask(void *) {
 
     if (disarm_request) {
       disarm_request = false;
+      arm_request = false;
+      hold_off = true;
       if (armed) motorsOff();
       speed = 0;
+      target.reset();
+      turn = 0;
       armed = false;
     }
     if (driver_fault) {
@@ -236,21 +311,38 @@ static void controlTask(void *) {
       if (armed) disarm(EV_DRIVER_FAULT, 0);
     }
 
+    // Stick targets. A report older than GAMEPAD_TIMEOUT_MS counts as a centred stick,
+    // so a lost pad or a stalled Bluetooth task brings the robot to a stop in place.
+    DriveCmd cmd;
+    portENTER_CRITICAL(&drive_mux);
+    cmd = drive_cmd;
+    portEXIT_CRITICAL(&drive_mux);
+    bool fresh = cmd.stamp_us >= 0 && now - cmd.stamp_us < GAMEPAD_TIMEOUT_MS * 1000LL;
+    float want_v = fresh ? applyDeadband(cmd.speed) * DRIVE_SPEED_MAX_MPS : 0.0f;
+    float want_turn = fresh ? applyDeadband(cmd.turn) * TURN_RATE_MAX_RPS : 0.0f;
+
     if (armed && fabsf(theta) > cutoff) {
       disarm(EV_FELL, toDeg(theta));
     } else if (armed) {
-      // outer loop: lean against wheel speed so the robot stays in place
-      float err_v = 0.0f - speed;
+      target.step(want_v, dt);
+      turn += constrain(want_turn - turn, -TURN_ACCEL_RPS2 * dt, TURN_ACCEL_RPS2 * dt);
+      // outer loop: lean toward the speed target, plus the lean that target's
+      // acceleration needs (a robot speeding up at a leans forward about a / g)
+      float err_v = target.v - speed;
       integ = constrain(integ + err_v * dt, -2.0f, 2.0f);
-      ref = constrain(gains.kv * err_v + gains.ki * integ, -ref_max, ref_max);
+      ref = constrain(gains.kv * err_v + gains.ki * integ + gains.kff * target.a / 9.81f, -ref_max, ref_max);
       // inner loop: wheel acceleration from pitch error and pitch rate
       accel_cmd = constrain(gains.kp * (theta - ref) + gains.kd * rate, -A_MAX_MPS2, A_MAX_MPS2);
       speed = constrain(speed + accel_cmd * dt, -V_MAX_MPS, V_MAX_MPS);
-      setWheelSpeed(speed);
+      // turning: one wheel faster, the other slower; the mean speed balances the robot
+      float half_diff = turn * TRACK_WIDTH_M * 0.5f;
+      setWheelSpeeds(speed + half_diff, speed - half_diff);
 
-      // disturbance -> recovery bookkeeping for the voice layer
+      // disturbance -> recovery bookkeeping for the voice layer; a lean the driver
+      // asked for is not a disturbance, so none starts while the targets are moving
+      bool driving = fabsf(target.v) > 0.02f || fabsf(target.a) > 0.02f || fabsf(turn) > 0.05f;
       float a = fabsf(toDeg(theta));
-      if (!disturbed && a > DISTURB_DEG) {
+      if (!disturbed && !driving && a > DISTURB_DEG) {
         disturbed = true;
         peak = a;
         disturb_start = now;
@@ -274,11 +366,21 @@ static void controlTask(void *) {
       else if (upright_since < 0) upright_since = now;
       bool held = upright_since >= 0 && now - upright_since > ARM_HOLD_MS * 1000LL;
       bool battery_ok = vbat < 5.0f || vbat > VBAT_CUTOFF_V;  // < 5 V: USB only, no pack fitted
-      if ((held || arm_request) && fabsf(theta) < arm_window && battery_ok && drivers_ok) {
-        arm_request = false;
+      // the last reported stick position, however old: a pushed stick whose reports
+      // stopped still counts as pushed, so it cannot arm into a sudden drive later
+      bool stick_centred = !pad_connected || cmd.stamp_us < 0 ||
+                           (applyDeadband(cmd.speed) == 0.0f && applyDeadband(cmd.turn) == 0.0f);
+      // an arm request is one-shot: it arms now or is dropped, and it needs a still robot too
+      bool request = arm_request;
+      arm_request = false;
+      bool can_arm = upright && battery_ok && drivers_ok && stick_centred && !pad_pairing;
+      if (((held && !hold_off) || request) && can_arm) {
+        hold_off = false;
         integ = ref = speed = 0;
+        target.reset();
+        turn = 0;
         disturbed = false;
-        setWheelSpeed(0);
+        setWheelSpeeds(0, 0);
         motorsOn();
         armed = true;
         sendEvent(EV_ARMED);
@@ -296,8 +398,11 @@ static void controlTask(void *) {
     }
 
     portENTER_CRITICAL(&snap_mux);
+    int32_t pad_ms = -1;
+    if (pad_connected && cmd.stamp_us >= 0) pad_ms = (int32_t)min<int64_t>((now - cmd.stamp_us) / 1000, 99999);
+    robot_armed = armed;
     snap = {(uint32_t)(now / 1000), toDeg(theta), toDeg(rate), speed, toDeg(ref),
-            accel_cmd, vbat, loop_us, jitter_max, armed};
+            accel_cmd, vbat, target.v, turn, loop_us, jitter_max, pad_ms, armed};
     portEXIT_CRITICAL(&snap_mux);
     if (tick % (CONTROL_HZ / TELEMETRY_HZ) == 0) jitter_max = 0;  // per telemetry window
   }
@@ -314,12 +419,15 @@ static void handleCommand(String line) {
   else if (cmd == "kd") gains.kd = val;
   else if (cmd == "kv") gains.kv = val;
   else if (cmd == "ki") gains.ki = val;
+  else if (cmd == "kff") gains.kff = val;
   else if (cmd == "trim") gains.trim_rad = toRad(val);
-  else if (cmd == "arm") arm_request = true;
+  else if (cmd == "arm") padArm();
   else if (cmd == "disarm") disarm_request = true;
+  else if (cmd == "forget") gamepadForgetKeys();  // unpair every pad (only while disarmed)
+  else if (cmd == "pair") gamepadPair();          // look for a new pad for PAIR_WINDOW_S
   else if (cmd != "get") return;
-  Serial.printf("{\"gains\":{\"kp\":%.3f,\"kd\":%.3f,\"kv\":%.3f,\"ki\":%.3f,\"trim\":%.2f}}\n",
-                gains.kp, gains.kd, gains.kv, gains.ki, toDeg(gains.trim_rad));
+  Serial.printf("{\"gains\":{\"kp\":%.3f,\"kd\":%.3f,\"kv\":%.3f,\"ki\":%.3f,\"kff\":%.2f,\"trim\":%.2f}}\n",
+                gains.kp, gains.kd, gains.kv, gains.ki, gains.kff, toDeg(gains.trim_rad));
 }
 
 static void telemetryTask(void *) {
@@ -332,27 +440,33 @@ static void telemetryTask(void *) {
     s = snap;
     portEXIT_CRITICAL(&snap_mux);
     Serial.printf("{\"t\":%lu,\"p\":%.2f,\"r\":%.1f,\"v\":%.3f,\"ref\":%.2f,\"a\":%.2f,\"armed\":%d,"
-                  "\"vbat\":%.2f,\"loop_us\":%lu,\"jit_us\":%lu}\n",
+                  "\"vbat\":%.2f,\"loop_us\":%lu,\"jit_us\":%lu,\"vt\":%.3f,\"yaw\":%.2f,\"pad_ms\":%ld}\n",
                   (unsigned long)s.t_ms, s.pitch_deg, s.rate_dps, s.speed_mps, s.ref_deg, s.accel_mps2,
-                  s.armed, s.vbat, (unsigned long)s.loop_us, (unsigned long)s.jitter_us);
+                  s.armed, s.vbat, (unsigned long)s.loop_us, (unsigned long)s.jitter_us, s.target_mps,
+                  s.turn_rps, (long)s.pad_ms);
 
     Event e;
     while (xQueueReceive(events, &e, 0) == pdTRUE) {
       switch (e.type) {
-        case EV_ARMED: Serial.println("{\"ev\":\"armed\"}"); break;
+        case EV_ARMED: Serial.print("{\"ev\":\"armed\"}\n"); break;
         case EV_FELL: Serial.printf("{\"ev\":\"fell\",\"p\":%.1f}\n", e.a); break;
         case EV_RECOVERED: Serial.printf("{\"ev\":\"recovered\",\"peak\":%.1f,\"ms\":%.0f}\n", e.a, e.b); break;
         case EV_LOWBAT: Serial.printf("{\"ev\":\"lowbat\",\"vbat\":%.2f}\n", e.a); break;
         case EV_CUTOFF: Serial.printf("{\"ev\":\"battery_cutoff\",\"vbat\":%.2f}\n", e.a); break;
-        case EV_IMU_LOST: Serial.println("{\"ev\":\"imu_lost\"}"); break;
-        case EV_DRIVER_FAULT: Serial.println("{\"ev\":\"driver_fault\"}"); break;
+        case EV_IMU_LOST: Serial.print("{\"ev\":\"imu_lost\"}\n"); break;
+        case EV_DRIVER_FAULT: Serial.print("{\"ev\":\"driver_fault\"}\n"); break;
+        case EV_PAD_ON: Serial.print("{\"ev\":\"pad_connected\"}\n"); break;
+        case EV_PAD_OFF: Serial.print("{\"ev\":\"pad_lost\"}\n"); break;
       }
     }
 
     // 10 Hz driver check. Any driver that is unpowered or has reset to defaults
     // disarms the robot; one that answers but lost its settings is configured again,
     // and the robot can re-arm only after both read back as set up.
-    if (++n % (TELEMETRY_HZ / 10) == 0) {
+    // No pack (USB only) means unpowered drivers: skip the poll, whose unanswered reads would
+    // hold this task busy and starve Bluetooth on this core. After a failed poll, poll at 1 Hz.
+    int poll_every = drivers_ok ? TELEMETRY_HZ / 10 : TELEMETRY_HZ;
+    if (++n % poll_every == 0 && s.vbat > 5.0f) {
       bool l_ok = tmc_l.isSetupAndCommunicating(), r_ok = tmc_r.isSetupAndCommunicating();
       if (!(l_ok && r_ok)) {
         if (s.armed) driver_fault = true;
@@ -388,7 +502,7 @@ void setup() {
   Wire.setTimeOut(3);  // ms; a hung bus must not stall the loop for long
   uint8_t who = mpuInit();
   while (who == 0x00 || who == 0xFF) {
-    Serial.println("{\"error\":\"IMU not found; check SDA/SCL wiring, 3.3 V and the I2C address\"}");
+    Serial.print("{\"error\":\"IMU not found; check SDA/SCL wiring, 3.3 V and the I2C address\"}\n");
     delay(1000);
     who = mpuInit();
   }
@@ -400,7 +514,7 @@ void setup() {
   configureDriver(tmc_r, TMC2209::SERIAL_ADDRESS_1);
   drivers_ok = tmc_l.isSetupAndCommunicating() && tmc_r.isSetupAndCommunicating();
   if (!drivers_ok)
-    Serial.println("{\"warn\":\"a TMC2209 is not answering on UART; check PDN_UART wiring, MS1/MS2 address pins and battery power\"}");
+    Serial.print("{\"warn\":\"a TMC2209 is not answering on UART; check PDN_UART wiring, MS1/MS2 address pins and battery power\"}\n");
 
   events = xQueueCreate(8, sizeof(Event));
   xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, configMAX_PRIORITIES - 2, &control_handle, 1);
@@ -409,6 +523,8 @@ void setup() {
   hw_timer_t *control_timer = timerBegin(1000000);
   timerAttachInterrupt(control_timer, &onControlTick);
   timerAlarm(control_timer, 1000000 / CONTROL_HZ, true, 0);
+
+  gamepadSetup();  // its own task on core 0
 }
 
 void loop() { vTaskDelete(nullptr); }  // all work happens in the tasks and timer interrupts

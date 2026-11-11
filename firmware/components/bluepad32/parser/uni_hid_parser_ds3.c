@@ -1,0 +1,419 @@
+/****************************************************************************
+Original DS3 support by Marcelo Lorenzati mlorenzati@gmail.com
+LEDs, rumble support + additional fixes by Ricardo Quesada
+
+Technical info taken from:
+https://github.com/torvalds/linux/blob/master/drivers/hid/hid-sony.c
+https://github.com/libretro/RetroArch/blob/5166eebcaf82ad784fe4856791880014d78807bd/input/common/hid/device_ds3.c#L180
+http://wiki.ros.org/ps3joy
+https://github.com/ros-drivers/joystick_drivers/blob/master/ps3joy/scripts/ps3joy_node.py
+https://github.com/felis/USB_Host_Shield_2.0/wiki/PS3-Information#Bluetooth
+https://github.com/jvpernis/esp32-ps3
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+****************************************************************************/
+
+#include "parser/uni_hid_parser_ds3.h"
+
+#include <stdint.h>
+#include <string.h>
+
+#include "controller/uni_controller.h"
+#include "controller/uni_gamepad.h"
+#include "hid_usage.h"
+#include "uni_config.h"
+#include "uni_hid_device.h"
+#include "uni_log.h"
+
+static const uint16_t DUALSHOCK3_VID = 0x054c;  // Sony
+static const uint16_t DUALSHOCK3_PID = 0x0268;  // DualShock 3
+// static const uint16_t PS3NAV_PID = 0x042f;      // PS3 Navigation Controller
+
+// Sixaxis / DualShock 3 IMU hardware sensitivities:
+// Accelerometer: 10-bit unsigned (0..1023, centered at 511), ~113 LSB/g.
+// Gyroscope: 10-bit unsigned (0..1023, centered at 511), single-axis yaw rate sensor (~123 deg/s per 100 LSB).
+#define DS3_ACCEL_RES_PER_G 113.0f
+#define DS3_GYRO_RES_PER_DEG_S (100.0f / 123.0f)
+
+// Required steps to determine what kind of extensions are supported.
+typedef enum ds3_fsm {
+    DS3_FSM_0,                    // Uninitialized
+    DS3_FSM_REQUIRES_LED_UPDATE,  // Requires LED to be updated
+    DS3_FSM_LED_UPDATED,          // LED updated
+} ds3_fsm_t;
+
+// ds3_instance_t represents data used by the DS3 driver instance.
+typedef struct ds3_instance_s {
+    ds3_fsm_t state;
+    uint8_t player_leds;  // bitmap of LEDs
+    bool clone_controller;
+} ds3_instance_t;
+_Static_assert(sizeof(ds3_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "DS3 instance too big");
+
+// As defined here:
+// https://github.com/ros-drivers/joystick_drivers/blob/52e8fcfb5619382a04756207b228fbc569f9a3ca/ps3joy/scripts/ps3joy_node.py#L276
+typedef struct __attribute((packed)) {
+    uint8_t transation_type;  // 0x52
+    uint8_t report_id;        // 0x01
+    uint8_t padding0;
+    uint8_t motor_right_duration;  // 0xff == forever
+    uint8_t motor_right_enabled;   // 0 or 1
+    uint8_t motor_left_duration;   // 0xff == forever
+    uint8_t motor_left_force;      // 0-255
+    uint8_t padding1[4];
+    uint8_t player_leds;
+    uint8_t led4[5];  // 0xff, 0x27, 0x10, 0x00, 0x32,
+    uint8_t led3[5];  // ditto above
+    uint8_t led2[5];  // ditto above
+    uint8_t led1[5];  // ditto above
+    uint8_t reserved[5];
+} ds3_output_report_t;
+
+typedef struct __attribute((packed)) {
+    uint8_t report_id;
+    uint8_t unk0;
+
+    // Dpad, main buttons, misc buttons
+    uint8_t buttons[3];
+
+    uint8_t unk1;
+
+    // Axis
+    uint8_t x, y;  // 0-255, 128-middle
+    uint8_t rx, ry;
+
+    uint8_t unk2[4];
+
+    // All these buttons have "pressure", a value that goes from 0 - 255
+
+    uint8_t dpad_up;     // 0-255
+    uint8_t dpad_right;  // 0-255
+    uint8_t dpad_down;   // 0-255
+    uint8_t dpad_left;   // 0-255
+
+    uint8_t brake;     // l2
+    uint8_t throttle;  // r2
+    uint8_t l1;
+    uint8_t r1;
+
+    uint8_t north;  // triangle
+    uint8_t east;   // circle
+    uint8_t south;  // cross
+    uint8_t west;   // square
+
+    // Don't care about the following values, added for completeness.
+
+    uint8_t unk3[3];
+
+    uint8_t charge;  // charging status ? 02 = charge, 03 = normal
+    uint8_t battery_status;
+    uint8_t connection;  // connection type
+
+    uint8_t unk4[9];
+
+    uint16_t accel_x;
+    uint16_t accel_y;
+    uint16_t accel_z;
+    uint16_t gyro_x;
+} ds3_input_report_t;
+_Static_assert(sizeof(ds3_input_report_t) == 49, "Invalid DS3 input report size");
+
+static ds3_instance_t* get_ds3_instance(uni_hid_device_t* d);
+static void ds3_update_led(uni_hid_device_t* d, uint8_t player_leds);
+static void ds3_send_output_report(uni_hid_device_t* d, ds3_output_report_t* out);
+static uni_rumble_result_t ds3_stop_rumble_now(struct uni_hid_device_s* d);
+static uni_rumble_result_t ds3_start_rumble_now(struct uni_hid_device_s* d,
+                                                uint8_t weak_magnitude,
+                                                uint8_t strong_magnitude,
+                                                uint8_t trigger_left,
+                                                uint8_t trigger_right);
+
+void uni_hid_parser_ds3_init_report(uni_hid_device_t* d) {
+    uni_controller_t* ctl = &d->controller;
+    memset(ctl, 0, sizeof(*ctl));
+
+    ctl->klass = UNI_CONTROLLER_CLASS_GAMEPAD;
+}
+
+void uni_hid_parser_ds3_parse_input_report(uni_hid_device_t* d, const uint8_t* report, uint16_t len) {
+    ds3_instance_t* ins = get_ds3_instance(d);
+    if (ins->state == DS3_FSM_REQUIRES_LED_UPDATE) {
+        ds3_update_led(d, ins->player_leds);
+    }
+
+    // Report len should be 49, at least in DS3. Not sure whether clones or older
+    // sixaxis version report the same length. To be safe, only query about the
+    // data that is going to be used.
+    if (len < 30) {
+        loge("ds3: Invalid report length, got: %d\n want: >= 29", len);
+        return;
+    }
+
+    const ds3_input_report_t* r = (const ds3_input_report_t*)report;
+
+    if (r->report_id != 0x01) {
+        loge("ds3: Unexpected report_id, got: 0x%02x, want: 0x01\n", r->report_id);
+        return;
+    }
+
+    uni_controller_t* ctl = &d->controller;
+
+    // Axis
+    ctl->gamepad.axis_x = (r->x - 127) * 4;
+    ctl->gamepad.axis_y = (r->y - 127) * 4;
+    ctl->gamepad.axis_rx = (r->rx - 127) * 4;
+    ctl->gamepad.axis_ry = (r->ry - 127) * 4;
+
+    // Brake & throttle
+    ctl->gamepad.brake = r->brake * 4;
+    ctl->gamepad.throttle = r->throttle * 4;
+
+    // Battery values:
+    //   0x01 : Shutdown
+    //   0x02 : Dying
+    //   0x03 : Low
+    //   0x04 : High
+    //   0x05 : Full
+    //   0xEE : Charging
+    switch (r->battery_status) {
+        case 1:
+            ctl->battery = 0;
+            break;
+        case 2:
+            ctl->battery = 64;
+            break;
+        case 3:
+            ctl->battery = 128;
+            break;
+        case 4:
+            ctl->battery = 192;
+            break;
+        case 5:
+        case 0xEE:
+            // Report charging same as full
+            ctl->battery = 255;
+            break;
+        default:
+            logi("DS3: Battery status not supported: %d\n", r->battery_status);
+    }
+
+    // Buttons
+    if (r->buttons[0] & 0x01)
+        ctl->gamepad.misc_buttons |= MISC_BUTTON_SELECT;  // Select
+    if (r->buttons[0] & 0x02)
+        ctl->gamepad.buttons |= BUTTON_THUMB_L;  // Thumb L
+    if (r->buttons[0] & 0x04)
+        ctl->gamepad.buttons |= BUTTON_THUMB_R;  // Thumb R
+    if (r->buttons[0] & 0x08)
+        ctl->gamepad.misc_buttons |= MISC_BUTTON_START;  // Start
+    if (r->buttons[0] & 0x10)
+        ctl->gamepad.dpad |= DPAD_UP;  // Dpad up
+    if (r->buttons[0] & 0x20)
+        ctl->gamepad.dpad |= DPAD_RIGHT;  // Dpad right
+    if (r->buttons[0] & 0x40)
+        ctl->gamepad.dpad |= DPAD_DOWN;  // Dpad down
+    if (r->buttons[0] & 0x80)
+        ctl->gamepad.dpad |= DPAD_LEFT;  // Dpad left
+    if (r->buttons[1] & 0x01)
+        ctl->gamepad.buttons |= BUTTON_TRIGGER_L;  // L2
+    if (r->buttons[1] & 0x02)
+        ctl->gamepad.buttons |= BUTTON_TRIGGER_R;  // R2
+    if (r->buttons[1] & 0x04)
+        ctl->gamepad.buttons |= BUTTON_SHOULDER_L;  // L1
+    if (r->buttons[1] & 0x08)
+        ctl->gamepad.buttons |= BUTTON_SHOULDER_R;  // R1
+    if (r->buttons[1] & 0x10)
+        ctl->gamepad.buttons |= BUTTON_Y;  // West
+    if (r->buttons[1] & 0x20)
+        ctl->gamepad.buttons |= BUTTON_B;  // South
+    if (r->buttons[1] & 0x40)
+        ctl->gamepad.buttons |= BUTTON_A;  // East
+    if (r->buttons[1] & 0x80)
+        ctl->gamepad.buttons |= BUTTON_X;  // North
+    if (r->buttons[2] & 0x01)
+        ctl->gamepad.misc_buttons |= MISC_BUTTON_SYSTEM;  // PS
+
+    // Accelerometer and Gyroscope (bytes 41..48 in the full 49-byte report).
+    // Sixaxis/DS3 reports 10-bit unsigned values (0..1023, centered at 511)
+    // in big-endian byte order (MSByte first).
+    // Reference: Linux kernel drivers/hid/hid-sony.c (sixaxis_raw_event)
+    if (len >= sizeof(ds3_input_report_t)) {
+        const int32_t raw_ax = (int32_t)btstack_flip_16(r->accel_x) - 511;
+        // Y and Z are swapped and inverted to match the canonical Y-up coordinate frame.
+        const int32_t raw_ay = 511 - (int32_t)btstack_flip_16(r->accel_z);
+        const int32_t raw_az = 511 - (int32_t)btstack_flip_16(r->accel_y);
+
+        ctl->gamepad.accel[0] = (float)raw_ax * (UNI_STANDARD_GRAVITY / DS3_ACCEL_RES_PER_G);
+        ctl->gamepad.accel[1] = (float)raw_ay * (UNI_STANDARD_GRAVITY / DS3_ACCEL_RES_PER_G);
+        ctl->gamepad.accel[2] = (float)raw_az * (UNI_STANDARD_GRAVITY / DS3_ACCEL_RES_PER_G);
+
+        // DS3 only has a 1-axis yaw gyroscope (rotation around the vertical Y axis).
+        const int32_t raw_gy = (int32_t)btstack_flip_16(r->gyro_x) - 511;
+        ctl->gamepad.gyro[0] = 0.0f;
+        ctl->gamepad.gyro[1] = (float)raw_gy * (UNI_DEG_TO_RAD / DS3_GYRO_RES_PER_DEG_S);
+        ctl->gamepad.gyro[2] = 0.0f;
+    }
+}
+
+void uni_hid_parser_ds3_set_player_leds(uni_hid_device_t* d, uint8_t leds) {
+    ds3_instance_t* ins = get_ds3_instance(d);
+    // Always update instance value. It could be used by rumble.
+    ins->player_leds = leds;
+
+    // It seems that if a LED update is sent before the "request stream report",
+    // then the stream report is ignored.
+    // Update LED after stream report is set.
+    if (ins->state <= DS3_FSM_REQUIRES_LED_UPDATE) {
+        ins->state = DS3_FSM_REQUIRES_LED_UPDATE;
+        return;
+    }
+    ds3_update_led(d, leds);
+}
+
+void uni_hid_parser_ds3_play_dual_rumble(struct uni_hid_device_s* d,
+                                         uint16_t start_delay_ms,
+                                         uint16_t duration_ms,
+                                         uint8_t weak_magnitude,
+                                         uint8_t strong_magnitude) {
+    if (d == NULL) {
+        loge("DS3: Invalid device\n");
+        return;
+    }
+
+    uni_hid_parser_rumble_play_dual(d, start_delay_ms, duration_ms, weak_magnitude, strong_magnitude,
+                                    ds3_start_rumble_now, ds3_stop_rumble_now);
+}
+
+void uni_hid_parser_ds3_setup(struct uni_hid_device_s* d) {
+    // Do NOT memset(ins, 0, sizeof(*ins)) here: uni_hid_parser_ds3_does_name_match() runs
+    // earlier during name discovery and sets ins->clone_controller = true for third-party
+    // PS3 clones. Zeroing ins here would erase that flag and break clone output reports.
+    uni_hid_parser_rumble_init(d, ds3_start_rumble_now, ds3_stop_rumble_now);
+
+    // Dual Shock 3 Sixasis requires a magic packet to be sent in order to enable reports. Taken from:
+    // https://github.com/torvalds/linux/blob/1d1df41c5a33359a00e919d54eaebfb789711fdc/drivers/hid/hid-sony.c#L1684
+    static uint8_t sixaxisEnableReports[] = {(HID_MESSAGE_TYPE_SET_REPORT << 4) | HID_REPORT_TYPE_FEATURE,
+                                             0xf4,  // Report ID
+                                             0x42,
+                                             0x03,
+                                             0x00,
+                                             0x00};
+    uni_hid_device_send_ctrl_report(d, (uint8_t*)&sixaxisEnableReports, sizeof(sixaxisEnableReports));
+
+    // TODO: should set "ready_complete" once we receive an ack from DS3 regarding report id 0xf4 (???)
+    uni_hid_device_set_ready_complete(d);
+}
+
+bool uni_hid_parser_ds3_does_name_match(struct uni_hid_device_s* d, const char* name) {
+    // Matching names like:
+    // - "PLAYSTATION(R)3 Controller"
+    // - "PLAYSTATION(R)3Conteroller-PANHAI"
+    // - "PLAYSTATION(R)3Controller-ghic"
+    // - "Navigation Controller"
+    uint16_t product_id = DUALSHOCK3_PID;
+    if (strcmp("Navigation Controller", name) == 0) {
+        // Should report this product id but need to update uni_hid_device_vendors.h
+        // product_id = PS3NAV_PID;
+    } else if (strncmp("PLAYSTATION(R)3", name, 15) == 0) {
+        if (strcmp("PLAYSTATION(R)3 Controller", name) != 0) {
+            ds3_instance_t* ins = get_ds3_instance(d);
+            ins->clone_controller = true;
+        }
+    } else {
+        return false;
+    }
+    // Fake PID/VID
+    uni_hid_device_set_vendor_id(d, DUALSHOCK3_VID);
+    uni_hid_device_set_product_id(d, product_id);
+    return true;
+}
+
+//
+// Helpers
+//
+static ds3_instance_t* get_ds3_instance(uni_hid_device_t* d) {
+    return (ds3_instance_t*)&d->parser_data[0];
+}
+
+static void ds3_update_led(uni_hid_device_t* d, uint8_t player_leds) {
+    ds3_instance_t* ins = get_ds3_instance(d);
+    ins->state = DS3_FSM_LED_UPDATED;
+
+    ds3_output_report_t out = {0};
+
+    // LED cmd. LED1==2, LED2==4, etc...
+    out.player_leds = player_leds << 1;
+
+    ds3_send_output_report(d, &out);
+}
+
+static uni_rumble_result_t ds3_stop_rumble_now(struct uni_hid_device_s* d) {
+    ds3_instance_t* ins = get_ds3_instance(d);
+
+    ds3_output_report_t out = {0};
+
+    // Don't overwrite Player LEDs
+    // LED cmd. LED1==2, LED2==4, etc...
+    out.player_leds = ins->player_leds << 1;
+
+    ds3_send_output_report(d, &out);
+    return UNI_RUMBLE_OK;
+}
+
+static uni_rumble_result_t ds3_start_rumble_now(struct uni_hid_device_s* d,
+                                                uint8_t weak_magnitude,
+                                                uint8_t strong_magnitude,
+                                                uint8_t trigger_left,
+                                                uint8_t trigger_right) {
+    ARG_UNUSED(trigger_left);
+    ARG_UNUSED(trigger_right);
+
+    ds3_instance_t* ins = get_ds3_instance(d);
+    ds3_output_report_t out = {0};
+
+    // Spec says that 0xff is "forever", but depends on the devices.
+    // Clones might work different.
+    out.motor_right_duration = 0xff;
+    out.motor_right_enabled = (weak_magnitude != 0);  // 0 or 1 only
+    out.motor_left_duration = 0xff;
+    out.motor_left_force = strong_magnitude;
+
+    // Don't overwrite Player LEDs
+    // LED cmd. LED1==2, LED2==4, etc...
+    out.player_leds = ins->player_leds << 1;
+
+    ds3_send_output_report(d, &out);
+    return UNI_RUMBLE_OK;
+}
+
+static void ds3_send_output_report(uni_hid_device_t* d, ds3_output_report_t* out) {
+    out->transation_type = 0x52;  // SET_REPORT output
+    out->report_id = 0x01;
+
+    // Default LEDs configuration.
+    static const uint8_t leds[] = {
+        0xff, 0x27, 0x10, 0x00, 0x32,  // Led4
+        0xff, 0x27, 0x10, 0x00, 0x32,  // Led3
+        0xff, 0x27, 0x10, 0x00, 0x32,  // Led2
+        0xff, 0x27, 0x10, 0x00, 0x32,  // Led1
+    };
+    memcpy(&out->led4, leds, sizeof(leds));
+
+    ds3_instance_t* ins = get_ds3_instance(d);
+    // Sony PS3 controllers expect the report on the control channel
+    uni_hid_device_send_ctrl_report(d, (uint8_t*)out, sizeof(*out));
+    if (ins->clone_controller) {
+        // Clone controllers expect the report on the interrupt channel
+        uni_hid_device_send_intr_report(d, (uint8_t*)out, sizeof(*out));
+    }
+}
