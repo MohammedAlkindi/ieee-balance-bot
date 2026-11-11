@@ -17,7 +17,15 @@
 #define GYRO_PITCH gy
 #define GYRO_SIGN (-1.0f)
 
-// ---- Steppers (TMC2209 in STEP/DIR mode, configured over one UART) ----
+// ---- Steppers ----
+// DRIVER_UART 1: two TMC2209s, configured over one UART (current, SpreadCycle, microsteps set here).
+// DRIVER_UART 0: any STEP/DIR driver set by its own pins and pot, such as an A4988, a DRV8825,
+//   or a TMC2208/TMC2209 in standalone mode. Set its microstep pins to match MICROSTEPS and its
+//   current with the pot. The firmware cannot check that these drivers are powered or set up.
+// Pick it with the build env (pio run -e esp32s3_stepdir) instead of editing this.
+#ifndef DRIVER_UART
+#define DRIVER_UART 1
+#endif
 // Fit an external 10k pull-up from EN to 3.3 V so the drivers stay off while the S3 boots or flashes.
 #define PIN_STEP_L 4
 #define PIN_DIR_L 5

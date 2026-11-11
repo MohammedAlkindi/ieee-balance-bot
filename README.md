@@ -61,6 +61,23 @@ the 3V3 pin as mutually exclusive supplies. While the laptop is plugged in, leav
 buck jumper open: USB powers the logic and the pack still powers the motors (grounds
 stay joined). Close it only when running without USB, or use a USB cable with VBUS cut.
 
+### Free drivers instead of TMC2209s
+
+If the drivers you can borrow (EnVision, the IEEE Project Space) are A4988s, DRV8825s, or TMC2208s
+without UART, build the STEP/DIR version: `pio run -e esp32s3_stepdir -t upload`. Wire STEP, DIR and
+EN as in the table, leave GPIO17/18 unconnected, and set each driver by hand:
+
+| Driver | 1/16 microstep (`MICROSTEPS 16`) | Current |
+|---|---|---|
+| A4988 | MS1, MS2, MS3 all HIGH | Set Vref with the pot: I = Vref / (8 x Rsense), Rsense usually 0.1 Ohm (check the module) |
+| DRV8825 | M0 LOW, M1 LOW, M2 HIGH | I = 2 x Vref; it has 1/32 too, but keep 1/16 to match `MICROSTEPS` |
+| TMC2208 / TMC2209 standalone | MS1 and MS2 both HIGH (both low is 1/8) | Vref per the module's sheet |
+
+Start at about 0.6 A and raise it only if a wheel skips steps. Keep the 100 uF cap at each driver.
+Tie RESET to SLEEP on A4988 and DRV8825 boards. This build cannot tell if a driver lost power,
+so check it is powered before you arm. If the microstep pins give something other than 1/16,
+change `MICROSTEPS` in `config.h` to match, or every speed will be off by that factor.
+
 ## 3. Flash and bring up
 
 ```bash

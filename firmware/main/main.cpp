@@ -16,12 +16,14 @@
 //         robot keeps balancing in place.
 // The control task never prints and never waits on Serial or the gamepad.
 #include <Arduino.h>
-#include <TMC2209.h>
 #include <Wire.h>
 #include <math.h>
 #include <soc/gpio_reg.h>
 
 #include "config.h"
+#if DRIVER_UART
+#include <TMC2209.h>
+#endif
 #include "pad.h"
 
 // Float versions of Arduino's degrees()/radians(), which promote to double;
@@ -72,9 +74,12 @@ volatile bool pad_pairing = false;
 // Set by the telemetry task's driver check. A TMC2209 that lost motor power comes back
 // with default registers (StealthChop, and 1/8 vs 1/32 microsteps set by its address
 // pins), so the robot must not run on it until it has been configured again.
-static volatile bool drivers_ok = false, driver_fault = false;
+// Plain STEP/DIR drivers (DRIVER_UART 0) cannot be checked, so they count as ready.
+static volatile bool drivers_ok = (DRIVER_UART == 0), driver_fault = false;
 static TaskHandle_t control_handle;
+#if DRIVER_UART
 static TMC2209 tmc_l, tmc_r;
+#endif
 
 // ---------------------------------------------------------------- step generator
 
@@ -126,6 +131,7 @@ static void setupDrivers() {
   timerAlarm(step_timer, 1000000 / STEP_TICK_HZ, true, 0);
 }
 
+#if DRIVER_UART
 // Driver registers reset whenever the battery is off, so this runs at boot and
 // again whenever a driver answers but reports that it is not set up.
 static void configureDriver(TMC2209 &d, TMC2209::SerialAddress addr) {
@@ -136,6 +142,7 @@ static void configureDriver(TMC2209 &d, TMC2209::SerialAddress addr) {
   d.disableStealthChop();  // SpreadCycle: StealthChop can stall on fast reversals
   d.enable();              // EN pin still gates the outputs
 }
+#endif
 
 // ---------------------------------------------------------------- IMU (MPU-6050)
 
@@ -460,6 +467,7 @@ static void telemetryTask(void *) {
       }
     }
 
+#if DRIVER_UART
     // 10 Hz driver check. Any driver that is unpowered or has reset to defaults
     // disarms the robot; one that answers but lost its settings is configured again,
     // and the robot can re-arm only after both read back as set up.
@@ -475,6 +483,7 @@ static void telemetryTask(void *) {
       }
       drivers_ok = l_ok && r_ok;
     }
+#endif
 
     while (Serial.available()) {
       char c = Serial.read();
@@ -510,11 +519,13 @@ void setup() {
     Serial.printf("{\"warn\":\"WHO_AM_I is 0x%02X, not 0x68: probably a clone MPU-6050; check the pitch reading before arming\"}\n", who);
   calibrateGyro();
 
+#if DRIVER_UART
   configureDriver(tmc_l, TMC2209::SERIAL_ADDRESS_0);
   configureDriver(tmc_r, TMC2209::SERIAL_ADDRESS_1);
   drivers_ok = tmc_l.isSetupAndCommunicating() && tmc_r.isSetupAndCommunicating();
   if (!drivers_ok)
     Serial.print("{\"warn\":\"a TMC2209 is not answering on UART; check PDN_UART wiring, MS1/MS2 address pins and battery power\"}\n");
+#endif
 
   events = xQueueCreate(8, sizeof(Event));
   xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, configMAX_PRIORITIES - 2, &control_handle, 1);

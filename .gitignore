@@ -8,3 +8,5 @@ __pycache__/
 firmware/managed_components/
 firmware/sdkconfig.esp32s3
 firmware/sdkconfig.esp32s3.old
+firmware/sdkconfig.esp32s3_stepdir
+firmware/sdkconfig.esp32s3_stepdir.old
