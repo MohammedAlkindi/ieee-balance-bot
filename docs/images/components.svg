@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title description">
+<title id="title">Core components</title>
+<desc id="description">Six illustrated reference parts: ESP32-S3, MPU-6050, HC-SR04, NEMA 17 stepper, stepper driver, and three-cell battery.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<g font-family="Arial, Helvetica, sans-serif" stroke-linecap="round" stroke-linejoin="round">
+<rect x="0" y="0" width="1200" height="650" rx="24" fill="#f3f7fa" stroke="#cad9e4" stroke-width="2"/>
+<text x="40" y="55" text-anchor="start" fill="#172c3e" font-size="38" font-weight="735">Core components</text>
+<text x="41" y="89" text-anchor="start" fill="#526b7c" font-size="21" font-weight="500">Part shapes are illustrations. Check markings and pin labels on your modules.</text>
+<rect x="40" y="120" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="63" y="160" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">ESP32-S3</text>
+<text x="63" y="313" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">1 controller</text>
+<text x="63" y="339" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">DevKitC-1 in firmware</text>
+<rect x="420" y="120" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="443" y="160" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">MPU-6050</text>
+<text x="443" y="313" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">1 tilt sensor</text>
+<text x="443" y="339" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">3.3 V I²C in this design</text>
+<rect x="800" y="120" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="823" y="160" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">HC-SR04</text>
+<text x="823" y="313" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">1 distance sensor</text>
+<text x="823" y="339" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">Firmware integration planned</text>
+<rect x="40" y="378" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="63" y="418" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">NEMA 17</text>
+<text x="63" y="571" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">2 stepper motors</text>
+<text x="63" y="597" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">One drives each wheel</text>
+<rect x="420" y="378" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="443" y="418" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">Motor driver</text>
+<text x="443" y="571" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">2 driver modules</text>
+<text x="443" y="597" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">TMC2209 is the default</text>
+<rect x="800" y="378" width="360" height="233" rx="16" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="823" y="418" text-anchor="start" fill="#172c3e" font-size="25" font-weight="710">3S LiPo</text>
+<text x="823" y="571" text-anchor="start" fill="#172c3e" font-size="20" font-weight="660">1 motor battery</text>
+<text x="823" y="597" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">Fused, switched motor power</text>
+<rect x="180" y="174" width="80" height="103" rx="8" fill="#08776b" stroke="#172c3e" stroke-width="2"/>
+<rect x="200.0" y="187.39" width="40.0" height="38.11" rx="4" fill="#d9e2ea" stroke="#8aa2b4" stroke-width="2"/>
+<rect x="211.2" y="259.49" width="17.6" height="22.66" rx="3" fill="#b5c5d2" stroke="#708797" stroke-width="2"/>
+<circle cx="188" cy="186" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="186" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="197" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="197" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="208" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="208" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="219" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="219" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="230" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="230" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="241" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="241" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="252" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="252" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="188" cy="263" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="252" cy="263" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<rect x="550" y="184" width="102" height="79" rx="8" fill="#08776b" stroke="#172c3e" stroke-width="2"/>
+<rect x="584" y="207" width="31" height="31" rx="4" fill="#172c3e" stroke="#a9c4cb" stroke-width="2"/>
+<circle cx="558" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="570" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="582" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="594" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="606" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="618" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="630" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="642" cy="253" r="2.5" fill="#f4ce85" stroke="none" stroke-width="2"/>
+<circle cx="562" cy="197" r="4.5" fill="#eff5f7" stroke="none" stroke-width="2"/>
+<circle cx="640" cy="197" r="4.5" fill="#eff5f7" stroke="none" stroke-width="2"/>
+<rect x="898" y="197" width="164" height="56" rx="7" fill="#21658b" stroke="#172c3e" stroke-width="2"/>
+<circle cx="939.0" cy="223.88" r="19.599999999999998" fill="#dce6ee" stroke="#8ba6b8" stroke-width="2"/>
+<circle cx="939.0" cy="223.88" r="12.936" fill="#364d5d" stroke="#9aafbf" stroke-width="2"/>
+<circle cx="1021.0" cy="223.88" r="19.599999999999998" fill="#dce6ee" stroke="#8ba6b8" stroke-width="2"/>
+<circle cx="1021.0" cy="223.88" r="12.936" fill="#364d5d" stroke="#9aafbf" stroke-width="2"/>
+<path d="M963.6 253 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M974.26 253 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M984.9200000000001 253 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M995.58 253 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<rect x="181" y="435" width="77" height="77" rx="9" fill="#7a90a3" stroke="#172c3e" stroke-width="2"/>
+<circle cx="219.5" cy="473.5" r="26.180000000000003" fill="#b8c9d5" stroke="#708797" stroke-width="2"/>
+<circle cx="219.5" cy="473.5" r="9.24" fill="#172c3e" stroke="#dce6ec" stroke-width="3"/>
+<circle cx="191.01" cy="445.01" r="2.541" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="247.99" cy="445.01" r="2.541" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="191.01" cy="501.99" r="2.541" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="247.99" cy="501.99" r="2.541" fill="#172c3e" stroke="none" stroke-width="2"/>
+<rect x="552" y="439" width="100" height="73" rx="8" fill="#08776b" stroke="#172c3e" stroke-width="2"/>
+<rect x="572" y="446" width="60" height="45" rx="4" fill="#a8b9c7" stroke="#172c3e" stroke-width="2"/>
+<path d="M579 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="447" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="447" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<path d="M588 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="458" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="458" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<path d="M597 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="469" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="469" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<path d="M606 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="480" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="480" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<path d="M615 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="491" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="491" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<path d="M624 452 v33" fill="none" stroke="#708797" stroke-width="3"/>
+<circle cx="560" cy="502" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="644" cy="502" r="2.3" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="616" cy="501" r="5" fill="#dce6ed" stroke="#172c3e" stroke-width="2"/>
+<rect x="905" y="445" width="133" height="62" rx="8" fill="#354b5e" stroke="#172c3e" stroke-width="2"/>
+<rect x="926.28" y="450" width="90.44000000000001" height="52" rx="4" fill="#e6edf3" stroke="#cad9e4" stroke-width="2"/>
+<text x="971.5" y="483.0" text-anchor="middle" fill="#172c3e" font-size="20" font-weight="720">3S</text>
+<path d="M1038 468.56 h16 M1038 483.44 h16" fill="none" stroke="#a64333" stroke-width="3"/>
+</g></svg>

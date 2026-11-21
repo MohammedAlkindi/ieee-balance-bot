@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="693" viewBox="0 0 1200 693" role="img" aria-labelledby="title description">
+<title id="title">Robot layout sketch</title>
+<desc id="description">A two-wheel chassis layout with stepper motors on a shared axle line, balance sensor near the center line, and a planned front ultrasonic sensor.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<g font-family="Arial, Helvetica, sans-serif" stroke-linecap="round" stroke-linejoin="round">
+<rect x="0" y="0" width="1200" height="693" rx="24" fill="#f3f7fa" stroke="#cad9e4" stroke-width="2"/>
+<text x="40" y="55" text-anchor="start" fill="#172c3e" font-size="38" font-weight="735">Robot layout sketch</text>
+<text x="41" y="89" text-anchor="start" fill="#526b7c" font-size="21" font-weight="500">Illustrated front view of the proposed assembly</text>
+<rect x="40" y="118" width="1120" height="537" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<path d="M356 508 H848" fill="none" stroke="#cad9e4" stroke-width="3" stroke-dasharray="8 8"/>
+<path d="M603 170 V527" fill="none" stroke="#cad9e4" stroke-width="2" stroke-dasharray="8 8"/>
+<rect x="449" y="241" width="308" height="281" rx="20" fill="#e0edf2" stroke="#81a0b3" stroke-width="2"/>
+<rect x="429" y="259" width="348" height="20" rx="6" fill="#849fb0" stroke="#172c3e" stroke-width="2"/>
+<rect x="429" y="487" width="348" height="21" rx="6" fill="#849fb0" stroke="#172c3e" stroke-width="2"/>
+<path d="M449 390 L501 486 M757 390 L705 486" fill="none" stroke="#a1b7c5" stroke-width="10"/>
+<path d="M351 416 H854" fill="none" stroke="#849fb0" stroke-width="10"/>
+<rect x="278" y="330" width="92" height="173" rx="18" fill="#233747" stroke="#172c3e" stroke-width="2"/>
+<path d="M292 352 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 374 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 396 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 418 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 440 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 462 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M292 484 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<rect x="836" y="330" width="92" height="173" rx="18" fill="#233747" stroke="#172c3e" stroke-width="2"/>
+<path d="M850 352 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 374 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 396 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 418 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 440 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 462 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<path d="M850 484 h64" fill="none" stroke="#526b7c" stroke-width="3"/>
+<rect x="382" y="380" width="72" height="72" rx="9" fill="#7a90a3" stroke="#172c3e" stroke-width="2"/>
+<circle cx="418.0" cy="416.0" r="24.48" fill="#b8c9d5" stroke="#708797" stroke-width="2"/>
+<circle cx="418.0" cy="416.0" r="8.64" fill="#172c3e" stroke="#dce6ec" stroke-width="3"/>
+<circle cx="391.36" cy="389.36" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="444.64" cy="389.36" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="391.36" cy="442.64" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="444.64" cy="442.64" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<rect x="752" y="380" width="72" height="72" rx="9" fill="#7a90a3" stroke="#172c3e" stroke-width="2"/>
+<circle cx="788.0" cy="416.0" r="24.48" fill="#b8c9d5" stroke="#708797" stroke-width="2"/>
+<circle cx="788.0" cy="416.0" r="8.64" fill="#172c3e" stroke="#dce6ec" stroke-width="3"/>
+<circle cx="761.36" cy="389.36" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="814.64" cy="389.36" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="761.36" cy="442.64" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<circle cx="814.64" cy="442.64" r="2.3760000000000003" fill="#172c3e" stroke="none" stroke-width="2"/>
+<rect x="573" y="288" width="60" height="83" rx="8" fill="#08776b" stroke="#172c3e" stroke-width="2"/>
+<rect x="588.0" y="298.79" width="30.0" height="30.71" rx="4" fill="#d9e2ea" stroke="#8aa2b4" stroke-width="2"/>
+<rect x="596.4" y="356.89" width="13.2" height="18.26" rx="3" fill="#b5c5d2" stroke="#708797" stroke-width="2"/>
+<circle cx="581" cy="300" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="300" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="581" cy="311" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="311" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="581" cy="322" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="322" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="581" cy="333" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="333" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="581" cy="344" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="344" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="581" cy="355" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<circle cx="625" cy="355" r="2.2" fill="#f1cb7e" stroke="none" stroke-width="2"/>
+<rect x="571" y="382" width="64" height="31" rx="5" fill="#d4eee9" stroke="#08776b" stroke-width="2"/>
+<text x="603" y="404" text-anchor="middle" fill="#08776b" font-size="16" font-weight="750">IMU</text>
+<rect x="544" y="427" width="118" height="46" rx="8" fill="#354b5e" stroke="#172c3e" stroke-width="2"/>
+<rect x="562.88" y="432" width="80.24000000000001" height="36" rx="4" fill="#e6edf3" stroke="#cad9e4" stroke-width="2"/>
+<text x="603.0" y="457.0" text-anchor="middle" fill="#172c3e" font-size="20" font-weight="720">3S</text>
+<path d="M662 444.48 h16 M662 455.52 h16" fill="none" stroke="#a64333" stroke-width="3"/>
+<rect x="539" y="214" width="128" height="49" rx="7" fill="#21658b" stroke="#172c3e" stroke-width="2"/>
+<circle cx="571.0" cy="237.52" r="17.15" fill="#dce6ee" stroke="#8ba6b8" stroke-width="2"/>
+<circle cx="571.0" cy="237.52" r="11.318999999999999" fill="#364d5d" stroke="#9aafbf" stroke-width="2"/>
+<circle cx="635.0" cy="237.52" r="17.15" fill="#dce6ee" stroke="#8ba6b8" stroke-width="2"/>
+<circle cx="635.0" cy="237.52" r="11.318999999999999" fill="#364d5d" stroke="#9aafbf" stroke-width="2"/>
+<path d="M590.2 263 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M598.5200000000001 263 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M606.84 263 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M615.1600000000001 263 v8" fill="none" stroke="#a78136" stroke-width="2"/>
+<path d="M603 207 V171 H741" fill="none" stroke="#935016" stroke-width="2" stroke-dasharray="8 8"/>
+<text x="750" y="169" text-anchor="start" fill="#935016" font-size="19" font-weight="680">HC-SR04 faces forward</text>
+<text x="750" y="193" text-anchor="start" fill="#526b7c" font-size="17" font-weight="500">Proposed mounting position</text>
+<path d="M569 324 H395 L353 271 H239" fill="none" stroke="#21658b" stroke-width="2"/>
+<circle cx="569" cy="324" r="4" fill="#21658b" stroke="none" stroke-width="2"/>
+<text x="65" y="259" text-anchor="start" fill="#172c3e" font-size="21" font-weight="710">ESP32-S3</text>
+<text x="65" y="285" text-anchor="start" fill="#526b7c" font-size="17" font-weight="500">Controller board</text>
+<path d="M636 395 H710 L777 313 H949" fill="none" stroke="#08776b" stroke-width="2"/>
+<circle cx="636" cy="395" r="4" fill="#08776b" stroke="none" stroke-width="2"/>
+<text x="964" y="310" text-anchor="start" fill="#172c3e" font-size="20" font-weight="710">Tilt sensor</text>
+<text x="964" y="334" text-anchor="start" fill="#526b7c" font-size="16" font-weight="500">Near center line</text>
+<path d="M396 452 L347 532 H202" fill="none" stroke="#21658b" stroke-width="2"/>
+<circle cx="396" cy="452" r="4" fill="#21658b" stroke="none" stroke-width="2"/>
+<text x="65" y="526" text-anchor="start" fill="#172c3e" font-size="20" font-weight="710">NEMA 17</text>
+<text x="65" y="550" text-anchor="start" fill="#526b7c" font-size="16" font-weight="500">One per wheel</text>
+<path d="M681 451 H732 L788 540 H948" fill="none" stroke="#a64333" stroke-width="2"/>
+<circle cx="681" cy="451" r="4" fill="#a64333" stroke="none" stroke-width="2"/>
+<text x="963" y="535" text-anchor="start" fill="#172c3e" font-size="20" font-weight="710">3S battery</text>
+<text x="963" y="559" text-anchor="start" fill="#526b7c" font-size="16" font-weight="500">Secure to chassis</text>
+<path d="M324 510 V581 M882 510 V581" fill="none" stroke="#cad9e4" stroke-width="2"/>
+<path d="M328 577 H878" fill="none" stroke="#526b7c" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<text x="603" y="609" text-anchor="middle" fill="#172c3e" font-size="19" font-weight="680">160 mm wheel spacing in firmware defaults</text>
+<text x="603" y="634" text-anchor="middle" fill="#526b7c" font-size="17" font-weight="500">90 mm nominal wheel diameter. Measure the assembled robot.</text>
+</g></svg>

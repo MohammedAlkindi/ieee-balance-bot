@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="976" viewBox="0 0 1200 976" role="img" aria-labelledby="title description">
+<title id="title">Wiring reference</title>
+<desc id="description">Control GPIOs, UART resistor placement, power protection, battery sense divider, and planned ultrasonic sensing.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<g font-family="Arial, Helvetica, sans-serif" stroke-linecap="round" stroke-linejoin="round">
+<rect x="0" y="0" width="1200" height="976" rx="24" fill="#f3f7fa" stroke="#cad9e4" stroke-width="2"/>
+<text x="40" y="55" text-anchor="start" fill="#172c3e" font-size="38" font-weight="735">Wiring reference</text>
+<text x="41" y="89" text-anchor="start" fill="#526b7c" font-size="21" font-weight="500">ESP32-S3-DevKitC-1 with two TMC2209s in UART mode</text>
+<rect x="40" y="118" width="594" height="341" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="63" y="155" text-anchor="start" fill="#172c3e" font-size="25" font-weight="700">Control signals</text>
+<text x="63" y="188" text-anchor="start" fill="#21658b" font-size="18" font-weight="690">ESP32-S3</text>
+<text x="317" y="188" text-anchor="start" fill="#21658b" font-size="18" font-weight="690">Connection</text>
+<rect x="57" y="197" width="559" height="31" rx="5" fill="#edf4f8" stroke="none" stroke-width="2"/>
+<text x="65" y="220" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">GPIO 8 / GPIO 9</text>
+<path d="M254 214 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="220" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">MPU-6050 SDA / SCL</text>
+<text x="65" y="252" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">3.3 V / GND</text>
+<path d="M254 246 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="252" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">MPU-6050 power and ground</text>
+<rect x="57" y="261" width="559" height="31" rx="5" fill="#edf4f8" stroke="none" stroke-width="2"/>
+<text x="65" y="284" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">GPIO 4 / GPIO 5</text>
+<path d="M254 278 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="284" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">Left driver STEP / DIR</text>
+<text x="65" y="316" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">GPIO 6 / GPIO 7</text>
+<path d="M254 310 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="316" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">Right driver STEP / DIR</text>
+<rect x="57" y="325" width="559" height="31" rx="5" fill="#edf4f8" stroke="none" stroke-width="2"/>
+<text x="65" y="348" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">GPIO 15</text>
+<path d="M254 342 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="348" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">Both driver EN pins (active low)</text>
+<text x="65" y="380" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">3.3 V through 10 kΩ</text>
+<path d="M254 374 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="380" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">GPIO 15 pull-up</text>
+<rect x="57" y="389" width="559" height="31" rx="5" fill="#edf4f8" stroke="none" stroke-width="2"/>
+<text x="65" y="412" text-anchor="start" fill="#172c3e" font-size="17" font-weight="620">3.3 V / GND</text>
+<path d="M254 406 H295" fill="none" stroke="#21658b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="317" y="412" text-anchor="start" fill="#354b5e" font-size="17" font-weight="500">Both driver VIO / GND</text>
+<text x="64" y="444" text-anchor="start" fill="#526b7c" font-size="17" font-weight="500">Native USB carries flashing, tuning and telemetry.</text>
+<rect x="658" y="118" width="502" height="341" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="681" y="155" text-anchor="start" fill="#172c3e" font-size="25" font-weight="700">Shared driver UART</text>
+<text x="683" y="198" text-anchor="start" fill="#172c3e" font-size="18" font-weight="650">GPIO 17 TX</text>
+<text x="683" y="250" text-anchor="start" fill="#172c3e" font-size="18" font-weight="650">GPIO 18 RX</text>
+<path d="M806 192 H837 M904 192 H938 V244 M806 244 H938 V292 H1109 M938 244 H1109" fill="none" stroke="#21658b" stroke-width="3"/>
+<rect x="837" y="181" width="67" height="22" rx="2" fill="#eef5f9" stroke="#21658b" stroke-width="2"/>
+<text x="870" y="172" text-anchor="middle" fill="#21658b" font-size="17" font-weight="650">1 kΩ</text>
+<circle cx="938" cy="244" r="5" fill="#21658b" stroke="none" stroke-width="2"/>
+<text x="1109" y="227" text-anchor="end" fill="#172c3e" font-size="17" font-weight="620">Left PDN_UART</text>
+<text x="1109" y="277" text-anchor="end" fill="#172c3e" font-size="17" font-weight="620">Right PDN_UART</text>
+<path d="M681 318 H1137" fill="none" stroke="#cad9e4" stroke-width="2"/>
+<text x="682" y="344" text-anchor="start" fill="#354b5e" font-size="18" font-weight="500">Left address 0   MS1 → GND, MS2 → GND</text>
+<text x="682" y="373" text-anchor="start" fill="#354b5e" font-size="18" font-weight="500">Right address 1   MS1 → VIO, MS2 → GND</text>
+<text x="682" y="412" text-anchor="start" fill="#526b7c" font-size="16" font-weight="500">For STEP/DIR, leave both UART pins unused.</text>
+<text x="682" y="434" text-anchor="start" fill="#526b7c" font-size="16" font-weight="500">Set the driver’s microstep pins for 1/16.</text>
+<rect x="40" y="483" width="1120" height="220" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="63" y="520" text-anchor="start" fill="#172c3e" font-size="25" font-weight="700">Power distribution</text>
+<rect x="65" y="538" width="131" height="50" rx="9" fill="#faeee9" stroke="#cad9e4" stroke-width="2"/>
+<text x="130.5" y="569.65" text-anchor="middle" fill="#a64333" font-size="19" font-weight="670">3S LiPo</text>
+<rect x="226" y="538" width="111" height="50" rx="9" fill="#faeee9" stroke="#cad9e4" stroke-width="2"/>
+<text x="281.5" y="569.65" text-anchor="middle" fill="#a64333" font-size="19" font-weight="670">XT60</text>
+<rect x="369" y="538" width="125" height="50" rx="9" fill="#faeee9" stroke="#cad9e4" stroke-width="2"/>
+<text x="431.5" y="569.65" text-anchor="middle" fill="#a64333" font-size="19" font-weight="670">5 A fuse</text>
+<rect x="527" y="538" width="151" height="50" rx="9" fill="#faeee9" stroke="#cad9e4" stroke-width="2"/>
+<text x="602.5" y="569.65" text-anchor="middle" fill="#a64333" font-size="19" font-weight="670">Main switch</text>
+<rect x="756" y="538" width="344" height="50" rx="9" fill="#faeee9" stroke="#cad9e4" stroke-width="2"/>
+<text x="928.0" y="569.65" text-anchor="middle" fill="#a64333" font-size="19" font-weight="670">Both driver VM inputs</text>
+<path d="M198 563 H222" fill="none" stroke="#a64333" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M339 563 H365" fill="none" stroke="#a64333" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M496 563 H523" fill="none" stroke="#a64333" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M681 563 H752" fill="none" stroke="#a64333" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M716 563 V615 H753" fill="none" stroke="#a64333" stroke-width="3" marker-end="url(#arrow)"/>
+<circle cx="716" cy="563" r="5" fill="#a64333" stroke="none" stroke-width="2"/>
+<text x="65" y="626" text-anchor="start" fill="#354b5e" font-size="18" font-weight="500">One 100 µF low-ESR capacitor across VM and GND at each driver.</text>
+<text x="65" y="673" text-anchor="start" fill="#172c3e" font-size="19" font-weight="650">Use one power source for the ESP32-S3. Leave the buck jumper open while USB powers it.</text>
+<rect x="756" y="595" width="344" height="42" rx="9" fill="#e9f4f2" stroke="#cad9e4" stroke-width="2"/>
+<text x="928.0" y="621.95" text-anchor="middle" fill="#08776b" font-size="17" font-weight="670">5 V buck → jumper → ESP32 5V</text>
+<rect x="40" y="723" width="594" height="220" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="63" y="760" text-anchor="start" fill="#172c3e" font-size="25" font-weight="700">Battery sense</text>
+<text x="62" y="797" text-anchor="start" fill="#172c3e" font-size="17" font-weight="630">After switch</text>
+<text x="355" y="797" text-anchor="start" fill="#21658b" font-size="18" font-weight="680">GPIO 1</text>
+<path d="M64 825 H171 M261 825 H498 M354 825 V838 M354 874 V904 M498 825 V858 M498 876 V904 M354 904 H498" fill="none" stroke="#21658b" stroke-width="3"/>
+<rect x="171" y="814" width="90" height="22" rx="2" fill="#eef5f9" stroke="#21658b" stroke-width="2"/>
+<text x="215" y="805" text-anchor="middle" fill="#21658b" font-size="17" font-weight="650">100 kΩ</text>
+<rect x="343" y="838" width="22" height="36" rx="2" fill="#eef5f9" stroke="#21658b" stroke-width="2"/>
+<text x="327" y="867" text-anchor="end" fill="#354b5e" font-size="17" font-weight="600">22 kΩ</text>
+<path d="M485 858 H511 M485 876 H511" fill="none" stroke="#21658b" stroke-width="3"/>
+<text x="518" y="874" text-anchor="start" fill="#354b5e" font-size="17" font-weight="600">100 nF</text>
+<circle cx="354" cy="825" r="5" fill="#21658b" stroke="none" stroke-width="2"/>
+<path d="M426 904 V913 M413 913 H439 M418 919 H434 M423 925 H429" fill="none" stroke="#21658b" stroke-width="2"/>
+<text x="62" y="872" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">Join logic and</text>
+<text x="62" y="896" text-anchor="start" fill="#526b7c" font-size="18" font-weight="500">motor grounds.</text>
+<rect x="658" y="723" width="502" height="220" rx="17" fill="#ffffff" stroke="#cad9e4" stroke-width="2"/>
+<text x="681" y="760" text-anchor="start" fill="#172c3e" font-size="25" font-weight="700">HC-SR04 integration</text>
+<text x="682" y="790" text-anchor="start" fill="#935016" font-size="15" font-weight="760">PLANNED</text>
+<text x="682" y="824" text-anchor="start" fill="#354b5e" font-size="19" font-weight="500">Choose Trigger and Echo GPIOs together.</text>
+<text x="682" y="852" text-anchor="start" fill="#354b5e" font-size="19" font-weight="500">For a standard 5 V module, step Echo down</text>
+<text x="682" y="880" text-anchor="start" fill="#354b5e" font-size="19" font-weight="500">to 3.3 V before it reaches the ESP32-S3.</text>
+</g></svg>

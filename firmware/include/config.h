@@ -32,8 +32,8 @@
 #define PIN_STEP_R 6
 #define PIN_DIR_R 7
 #define PIN_MOTOR_EN 15        // both drivers' EN, active low
-#define PIN_TMC_TX 17          // to PDN_UART of both drivers
-#define PIN_TMC_RX 18          // joined to TX through a 1 kOhm resistor
+#define PIN_TMC_TX 17          // through 1 kOhm to the shared PDN_UART line
+#define PIN_TMC_RX 18          // directly to the shared PDN_UART line
 #define TMC_ADDR_L 0           // left driver MS1 = GND, MS2 = GND
 #define TMC_ADDR_R 1           // right driver MS1 = VIO, MS2 = GND
 #define MOTOR_RMS_MA 900       // 0.9-1.2 A for a 1.5-1.7 A NEMA 17; heatsink + airflow on the drivers
