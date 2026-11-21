@@ -10,6 +10,45 @@ turns its telemetry into speech (Claude writes the line, ElevenLabs says it).
 | `firmware/` | PlatformIO project for the ESP32-S3: Arduino-ESP32 3.3.12 inside ESP-IDF 5.5.5, plus Bluepad32 | Compiles; not yet run on a robot or paired with a pad |
 | `bridge/` | Serial telemetry -> Claude -> ElevenLabs -> speaker | 6 tests pass; not yet run with real keys |
 
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Host["Host PC / Laptop"]
+        Sim["Physics Simulator\n(sim/sim.py)"]
+        Bridge["Voice Bridge\n(bridge/bridge.py)"]
+        Claude["Anthropic API\n(Claude)"]
+        Eleven["ElevenLabs API\n(Speech)"]
+        Bridge <--> Claude
+        Bridge --> Eleven
+    end
+
+    subgraph Robot["Self-Balancing Robot (ESP32-S3 Hardware)"]
+        USB["Native USB CDC\n(GPIO 19 / 20)"]
+        PadBLE["Bluetooth LE\n(Bluepad32)"]
+        
+        subgraph Core["Firmware (firmware/src/main.cpp)"]
+            Loop["500 Hz Balance Loop"]
+            Filter["Complementary Filter\n(Pitch Angle Estimation)"]
+            PID["PID Controller\n(Kp, Kd, Kv, Ki)"]
+            StepGen["40 kHz Step Timer\n(Timer Interrupt)"]
+            Telem["50 Hz JSON Telemetry"]
+        end
+
+        IMU["MPU-6050 IMU\n(I2C: GPIO 8 / 9)"]
+        Drivers["Dual Stepper Drivers\n(TMC2209 / A4988)"]
+        Motors["NEMA 17 Steppers\n(200 steps/rev, 16x uSteps)"]
+        BatSens["Battery Divider\n(GPIO 1 - ADC1)"]
+    end
+
+    Pad["BLE Gamepad\n(Xbox / Stadia)"] -.->|BLE| PadBLE
+    USB <==>|921600 baud JSON| Bridge
+    IMU --> Filter --> Loop --> PID --> StepGen --> Drivers --> Motors
+    BatSens --> Loop
+    PadBLE --> Loop
+    Loop --> Telem --> USB
+```
+
 ## 1. Simulate (no hardware)
 
 ```bash
@@ -42,6 +81,65 @@ check a change to `DRIVE_*` in `config.h`, copy it into `Drive` and `DRIVE_SPEED
 | TMC UART RX | 18 | Joined to GPIO17 through a 1 kOhm resistor |
 | Battery sense | 1 | Switched pack + (after the main switch) -> 100 kOhm -> GPIO1 -> 22 kOhm -> GND, 100 nF to GND |
 | USB (native port) | 19 / 20 | Laptop: telemetry, tuning, flashing |
+
+```mermaid
+graph LR
+    subgraph Power["Power System"]
+        Pack["3S LiPo Battery\n(11.1V - 12.6V)"]
+        Fuse["5A Blade Fuse"]
+        Switch["Main Toggle Switch"]
+        Buck["5V Buck Regulator\n(Set to 5.0V)"]
+        Jumper["Power Isolation Jumper\n(OPEN when USB connected)"]
+        Pack --> Fuse --> Switch
+        Switch --> Buck --> Jumper
+    end
+
+    subgraph MCU["ESP32-S3-DevKitC-1"]
+        ESP_5V["5V Pin"]
+        ESP_3V3["3.3V Pin"]
+        ESP_GND["GND"]
+        GPIO1["GPIO 1 (ADC1)"]
+        GPIO4["GPIO 4 (Step L)"]
+        GPIO5["GPIO 5 (Dir L)"]
+        GPIO6["GPIO 6 (Step R)"]
+        GPIO7["GPIO 7 (Dir R)"]
+        GPIO8["GPIO 8 (SDA)"]
+        GPIO9["GPIO 9 (SCL)"]
+        GPIO15["GPIO 15 (EN)"]
+        GPIO17["GPIO 17 (TX)"]
+        GPIO18["GPIO 18 (RX)"]
+    end
+
+    subgraph Sensors["Sensors"]
+        IMU_SDA["MPU-6050 SDA"]
+        IMU_SCL["MPU-6050 SCL"]
+    end
+
+    subgraph Drivers["TMC2209 Drivers (or A4988/DRV8825)"]
+        L_STEP["Left STEP"]
+        L_DIR["Left DIR"]
+        R_STEP["Right STEP"]
+        R_DIR["Right DIR"]
+        M_EN["Both Drivers EN\n(+ 10kΩ pull-up to 3.3V)"]
+        UART_BUS["Single-Wire UART\n(Addr 0 Left, Addr 1 Right)"]
+    end
+
+    subgraph BatSense["Battery Voltage Divider"]
+        DIV["100kΩ / 22kΩ Divider\n+ 100nF Cap to GND"]
+    end
+
+    Jumper --> ESP_5V
+    Switch --> DIV --> GPIO1
+    GPIO8 --> IMU_SDA
+    GPIO9 --> IMU_SCL
+    GPIO4 --> L_STEP
+    GPIO5 --> L_DIR
+    GPIO6 --> R_STEP
+    GPIO7 --> R_DIR
+    GPIO15 --> M_EN
+    GPIO17 --> UART_BUS
+    GPIO17 ---|1kΩ Resistor| GPIO18
+```
 
 Driver addresses: left MS1 = GND, MS2 = GND (address 0); right MS1 = VIO, MS2 = GND
 (address 1). Turn both VREF pots low: a driver that loses power comes back on its pins'
@@ -78,6 +176,35 @@ Tie RESET to SLEEP on A4988 and DRV8825 boards. This build cannot tell if a driv
 so check it is powered before you arm. If the microstep pins give something other than 1/16,
 change `MICROSTEPS` in `config.h` to match, or every speed will be off by that factor.
 
+### Physical Component Layout
+
+```mermaid
+flowchart TD
+    subgraph Top["Top Deck (Compute & Sensing)"]
+        S3["ESP32-S3 DevKitC-1 (USB Accessible)"]
+        MPU["MPU-6050 IMU (Rigid mount, Center axis)"]
+        US["HC-SR04 Ultrasonic (Forward Facing)"]
+    end
+
+    subgraph Mid["Middle Deck (Power & Drivers)"]
+        TMC["Dual Drivers + Heatsinks + 100µF Caps"]
+        SW["Main Toggle Switch & 5A Fuse"]
+        Buck["5V Buck Converter & Jumper"]
+        LiPo["3S LiPo Battery (Centered for Low CG)"]
+    end
+
+    subgraph Base["Lower Axle (Drive Base)"]
+        M_Left["Left NEMA 17 Stepper"]
+        M_Right["Right NEMA 17 Stepper"]
+        W_Left["Left Wheel (85-95 mm)"]
+        W_Right["Right Wheel (85-95 mm)"]
+    end
+
+    Top --- Mid --- Base
+    M_Left --- W_Left
+    M_Right --- W_Right
+```
+
 ## 3. Flash and bring up
 
 ```bash
@@ -96,6 +223,28 @@ ESP-IDF and Bluetooth logs, and crash backtraces, go to the board's other USB co
 
 `firmware/sdkconfig.defaults` sets the ESP-IDF options. If you change it, delete
 `firmware/sdkconfig.esp32s3` so the next build picks the change up.
+
+### State Machine & Safety Control Loop
+
+```mermaid
+stateDiagram-v2
+    [*] --> BOOT: Power Applied
+    BOOT --> DISARMED: Self-test & Bluepad32 Init (20s Window)
+    
+    DISARMED --> ARMING: Upright (|pitch| < 2.0°) for 500 ms OR 'A' Button Pressed
+    ARMING --> ARMED: Pitch Still Valid
+    ARMING --> DISARMED: Disturbed / Tipped
+
+    state ARMED {
+        [*] --> BalanceActive: Enable Drivers (GPIO15 LOW)
+        BalanceActive --> BalanceActive: 500 Hz PID Loop
+        BalanceActive --> DriveTarget: BLE Gamepad Stick Input
+    }
+
+    ARMED --> DISARMED: Tip-over Cutoff (|pitch| > 35.0°)
+    ARMED --> DISARMED: Low Battery Cutoff (< 10.2V)
+    ARMED --> DISARMED: 'B' Button Pressed / Serial 'disarm'
+```
 
 Bring-up order, wheels off the ground (robot on a stand) until step 5:
 
